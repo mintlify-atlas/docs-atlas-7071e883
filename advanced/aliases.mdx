@@ -1,0 +1,484 @@
+---
+title: Field Aliases
+description: Map field names for validation and serialization
+---
+
+Field aliases allow you to use different names for fields during validation (input) and serialization (output). This is essential when working with external APIs or databases that use different naming conventions.
+
+## Basic Aliases
+
+Define a simple alias for a field:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    name: str = Field(alias='username')
+    age: int = Field(alias='user_age')
+
+# Validate using aliases
+user = User(username='John', user_age=30)
+print(user.name)  # 'John'
+print(user.age)   # 30
+
+# Serialize using aliases
+print(user.model_dump(by_alias=True))
+# {'username': 'John', 'user_age': 30}
+```
+
+## Validation Alias
+
+Use different aliases for input validation:
+
+```python
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    # Accept 'userName' or 'user_name' during validation
+    name: str = Field(validation_alias='userName')
+
+# Validation uses the validation_alias
+model = Model(userName='John')
+print(model.name)  # 'John'
+
+# Field name used in code
+print(model.model_dump())
+# {'name': 'John'}
+```
+
+## Serialization Alias
+
+Use different aliases for output serialization:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    internal_id: int = Field(serialization_alias='id')
+    full_name: str = Field(serialization_alias='name')
+
+# Create with actual field names
+user = User(internal_id=123, full_name='John Doe')
+
+# Serialize with serialization aliases
+print(user.model_dump(by_alias=True))
+# {'id': 123, 'name': 'John Doe'}
+
+# Access using actual names
+print(user.internal_id)  # 123
+print(user.full_name)    # 'John Doe'
+```
+
+## AliasPath
+
+Extract nested data using path-based aliases:
+
+```python
+from pydantic import BaseModel, Field, AliasPath
+
+class Model(BaseModel):
+    # Extract from nested structure
+    user_name: str = Field(validation_alias=AliasPath('user', 'name'))
+    user_age: int = Field(validation_alias=AliasPath('user', 'age'))
+    city: str = Field(validation_alias=AliasPath('address', 'city'))
+
+# Input data with nested structure
+data = {
+    'user': {
+        'name': 'John',
+        'age': 30
+    },
+    'address': {
+        'city': 'New York'
+    }
+}
+
+model = Model(**data)
+print(model.user_name)  # 'John'
+print(model.user_age)   # 30
+print(model.city)       # 'New York'
+```
+
+### Array Indexing with AliasPath
+
+Access array elements by index:
+
+```python
+from pydantic import BaseModel, Field, AliasPath
+
+class Model(BaseModel):
+    first_item: str = Field(validation_alias=AliasPath('items', 0))
+    nested_value: int = Field(validation_alias=AliasPath('data', 0, 'value'))
+
+data = {
+    'items': ['first', 'second', 'third'],
+    'data': [{'value': 42}, {'value': 100}]
+}
+
+model = Model(**data)
+print(model.first_item)    # 'first'
+print(model.nested_value)  # 42
+```
+
+## AliasChoices
+
+Accept multiple possible aliases:
+
+```python
+from pydantic import BaseModel, Field, AliasChoices
+
+class Model(BaseModel):
+    # Accept any of these names
+    name: str = Field(
+        validation_alias=AliasChoices('username', 'user_name', 'userName')
+    )
+
+# All of these work
+print(Model(username='John').name)      # 'John'
+print(Model(user_name='Jane').name)     # 'Jane'
+print(Model(userName='Bob').name)       # 'Bob'
+```
+
+### Combining AliasPath with AliasChoices
+
+Try multiple nested paths:
+
+```python
+from pydantic import BaseModel, Field, AliasPath, AliasChoices
+
+class Model(BaseModel):
+    email: str = Field(
+        validation_alias=AliasChoices(
+            'email',
+            AliasPath('contact', 'email'),
+            AliasPath('user', 'contact', 'email')
+        )
+    )
+
+# Try different structures
+print(Model(email='a@example.com').email)
+# 'a@example.com'
+
+print(Model(contact={'email': 'b@example.com'}).email)
+# 'b@example.com'
+
+print(Model(user={'contact': {'email': 'c@example.com'}}).email)
+# 'c@example.com'
+```
+
+## Alias Generator
+
+Generate aliases automatically for all fields:
+
+```python
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel, to_snake
+
+class CamelModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    user_name: str
+    user_age: int
+    email_address: str
+
+# Validate with camelCase
+model = CamelModel(
+    userName='John',
+    userAge=30,
+    emailAddress='john@example.com'
+)
+
+# Serialize with camelCase
+print(model.model_dump(by_alias=True))
+# {'userName': 'John', 'userAge': 30, 'emailAddress': 'john@example.com'}
+```
+
+### Built-in Alias Generators
+
+```python
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import (
+    to_camel,      # userName
+    to_pascal,     # UserName  
+    to_snake,      # user_name
+)
+
+class ApiModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True  # Also accept field names
+    )
+    
+    first_name: str
+    last_name: str
+
+# Accept both formats
+model1 = ApiModel(firstName='John', lastName='Doe')
+model2 = ApiModel(first_name='Jane', last_name='Smith')
+
+print(model1.model_dump(by_alias=True))
+# {'firstName': 'John', 'lastName': 'Doe'}
+```
+
+## Custom Alias Generator
+
+Create custom alias generation logic:
+
+```python
+from pydantic import BaseModel, ConfigDict, AliasGenerator
+
+def prefix_with_api(field_name: str) -> str:
+    return f'api_{field_name}'
+
+class Model(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=AliasGenerator(
+            validation_alias=prefix_with_api,
+            serialization_alias=prefix_with_api
+        )
+    )
+    
+    name: str
+    value: int
+
+# Validate with prefixed names
+model = Model(api_name='test', api_value=42)
+
+# Serialize with prefixed names
+print(model.model_dump(by_alias=True))
+# {'api_name': 'test', 'api_value': 42}
+```
+
+## Separate Validation and Serialization Aliases
+
+Use different aliases for input and output:
+
+```python
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    internal_name: str = Field(
+        validation_alias='input_name',
+        serialization_alias='output_name'
+    )
+
+# Validate with validation_alias
+model = Model(input_name='value')
+
+# Serialize with serialization_alias
+print(model.model_dump(by_alias=True))
+# {'output_name': 'value'}
+
+# Access with field name
+print(model.internal_name)
+# 'value'
+```
+
+## Alias Priority
+
+Control which alias takes precedence:
+
+```python
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    # Higher priority alias wins
+    name: str = Field(alias='username', alias_priority=2)
+    
+class SubModel(Model):
+    # Override parent's alias
+    name: str = Field(alias='user_name', alias_priority=1)
+
+# Uses the higher priority alias
+model = SubModel(user_name='John')
+print(model.model_dump(by_alias=True))
+# {'user_name': 'John'}
+```
+
+## Populate by Name
+
+Accept both field names and aliases:
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+
+class Model(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    
+    name: str = Field(alias='username')
+    age: int = Field(alias='user_age')
+
+# Accept either field name or alias
+model1 = Model(username='John', user_age=30)
+model2 = Model(name='Jane', age=25)
+
+print(model1.name)  # 'John'
+print(model2.name)  # 'Jane'
+```
+
+## Nested Models with Aliases
+
+Use aliases in nested model structures:
+
+```python
+from pydantic import BaseModel, Field
+
+class Address(BaseModel):
+    street: str = Field(alias='streetName')
+    city: str = Field(alias='cityName')
+
+class User(BaseModel):
+    name: str = Field(alias='userName')
+    address: Address
+
+user = User(
+    userName='John',
+    address={
+        'streetName': '123 Main St',
+        'cityName': 'New York'
+    }
+)
+
+print(user.model_dump(by_alias=True))
+# {
+#     'userName': 'John',
+#     'address': {'streetName': '123 Main St', 'cityName': 'New York'}
+# }
+```
+
+## JSON Schema with Aliases
+
+Aliases appear in generated JSON schemas:
+
+```python
+from pydantic import BaseModel, Field
+import json
+
+class Model(BaseModel):
+    internal_id: int = Field(alias='id')
+    user_name: str = Field(alias='name')
+
+schema = Model.model_json_schema(by_alias=True)
+print(json.dumps(schema, indent=2))
+# Properties use aliases: 'id' and 'name'
+```
+
+## Validation Modes
+
+Control how aliases are used during validation:
+
+```python
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    name: str = Field(alias='userName')
+
+# By alias (default)
+model = Model.model_validate({'userName': 'John'})
+
+# By field name  
+model = Model.model_validate({'name': 'Jane'}, by_name=True)
+
+# Both alias and name
+model = Model.model_validate(
+    {'userName': 'Bob'},
+    by_alias=True,
+    by_name=True
+)
+```
+
+## Common Patterns
+
+<CodeGroup>
+
+```python Snake to Camel Case
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
+
+class ApiResponse(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+    
+    user_id: int
+    first_name: str
+    last_name: str
+    email_address: str
+
+response = ApiResponse(
+    userId=1,
+    firstName='John',
+    lastName='Doe',
+    emailAddress='john@example.com'
+)
+```
+
+```python Database Column Mapping
+from pydantic import BaseModel, Field
+
+class UserModel(BaseModel):
+    id: int = Field(alias='user_id')
+    name: str = Field(alias='full_name')
+    created: str = Field(alias='created_at')
+
+# Map from database columns
+db_row = {
+    'user_id': 123,
+    'full_name': 'John Doe',
+    'created_at': '2024-01-01'
+}
+
+user = UserModel(**db_row)
+```
+
+```python API Compatibility
+from pydantic import BaseModel, Field, AliasChoices
+
+class LegacyCompatible(BaseModel):
+    # Support old and new field names
+    email: str = Field(
+        validation_alias=AliasChoices(
+            'email',
+            'email_address',  # v1 API
+            'user_email'      # v2 API
+        )
+    )
+
+# Works with any version
+Model(email='a@test.com')
+Model(email_address='b@test.com')
+Model(user_email='c@test.com')
+```
+
+</CodeGroup>
+
+## Best Practices
+
+<Accordion title="When to Use Aliases">
+  Use aliases for:
+  - External API integration (different naming conventions)
+  - Database ORM mapping (table columns vs model fields)
+  - Legacy system compatibility
+  - Multi-version API support
+  
+  Avoid aliases for:
+  - Internal models (use consistent naming)
+  - Simple applications (adds complexity)
+</Accordion>
+
+<Accordion title="Alias Strategy">
+  Choose the right alias type:
+  - `alias`: Both validation and serialization
+  - `validation_alias`: Input only (reading data)
+  - `serialization_alias`: Output only (writing data)
+  - `AliasGenerator`: Consistent transformation across all fields
+</Accordion>
+
+<Accordion title="Performance">
+  Alias considerations:
+  - Aliases add minimal overhead
+  - AliasPath is slightly slower (nested lookups)
+  - AliasChoices tries each option in order
+  - Use specific aliases over AliasChoices when possible
+</Accordion>

@@ -1,0 +1,337 @@
+---
+title: Why Use Pydantic?
+description: Discover the benefits of using Pydantic for data validation in Python
+---
+
+# Why Use Pydantic?
+
+Pydantic is the most widely used data validation library for Python, trusted by millions of developers and powering critical applications worldwide. Here's why you should use it.
+
+## Performance
+
+Pydantic v2 is built on `pydantic-core`, a validation library written in Rust that delivers exceptional performance.
+
+<Note>
+Pydantic v2 is up to **20x faster** than Pydantic v1, making it one of the fastest data validation libraries available for Python.
+</Note>
+
+```python
+from pydantic import BaseModel
+from datetime import datetime
+
+class Event(BaseModel):
+    event_id: int
+    timestamp: datetime
+    user_ids: list[int]
+    metadata: dict[str, str]
+
+# Validating millions of events per second
+event = Event(
+    event_id='12345',
+    timestamp='2024-01-15T10:30:00',
+    user_ids=['1', '2', '3'],
+    metadata={'source': 'api', 'version': '2.0'}
+)
+```
+
+The Rust-powered core provides blazing-fast validation while maintaining Python's ease of use.
+
+## Type Safety
+
+Pydantic provides both runtime validation and static type checking, giving you confidence that your data is correct.
+
+### Runtime Validation
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+
+try:
+    user = User(id='not-a-number', name='John', email='john@example.com')
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for User
+    id
+      Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='not-a-number', input_type=str]
+    '''
+```
+
+### Static Type Checking
+
+Pydantic models work seamlessly with type checkers like mypy and pyright:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+
+def process_user(user: User) -> str:
+    return user.name.upper()  # Type checker knows name is a str
+
+user = User(id=123, name='John')
+result = process_user(user)  # Type checker validates this call
+```
+
+## IDE Support
+
+Pydantic provides excellent autocomplete and inline type checking in modern IDEs.
+
+<CardGroup cols={2}>
+  <Card title="Autocomplete" icon="wand-magic-sparkles">
+    Your IDE knows exactly what fields are available and their types
+  </Card>
+  
+  <Card title="Type Hints" icon="circle-info">
+    Inline documentation and type information as you code
+  </Card>
+  
+  <Card title="Error Detection" icon="triangle-exclamation">
+    Catch type errors before running your code
+  </Card>
+  
+  <Card title="Refactoring" icon="arrows-rotate">
+    Rename fields and update references confidently
+  </Card>
+</CardGroup>
+
+```python
+from pydantic import BaseModel
+
+class Product(BaseModel):
+    product_id: int
+    name: str
+    price: float
+    in_stock: bool
+
+product = Product(product_id=1, name='Widget', price=9.99, in_stock=True)
+
+# Your IDE autocompletes these fields:
+product.product_id  # ✓ IDE suggests this
+product.name        # ✓ IDE suggests this
+product.price       # ✓ IDE suggests this
+```
+
+## Data Parsing & Coercion
+
+Pydantic intelligently converts data to the correct type, making it perfect for parsing API responses, configuration files, and user input.
+
+```python
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str = 'John Doe'
+    signup_ts: Optional[datetime] = None
+    friends: list[int] = []
+
+# Notice all the type conversions:
+external_data = {
+    'id': '123',                    # string → int
+    'signup_ts': '2017-06-01 12:22', # string → datetime
+    'friends': [1, '2', b'3']       # mixed types → list[int]
+}
+
+user = User(**external_data)
+print(user.id)         #> 123 (int)
+print(user.signup_ts)  #> 2017-06-01 12:22:00 (datetime)
+print(user.friends)    #> [1, 2, 3] (list[int])
+```
+
+## Comprehensive Validation
+
+Go beyond type checking with custom validators and constraints:
+
+```python
+from pydantic import BaseModel, Field, field_validator
+
+class Product(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    price: float = Field(gt=0, le=1000000)
+    sku: str
+    
+    @field_validator('sku')
+    @classmethod
+    def validate_sku(cls, v: str) -> str:
+        if not v.startswith('SKU-'):
+            raise ValueError('SKU must start with "SKU-"')
+        return v.upper()
+
+product = Product(name='Widget', price=29.99, sku='sku-12345')
+print(product.sku)  #> SKU-12345
+```
+
+## JSON Schema Generation
+
+Automatically generate JSON Schema for API documentation, OpenAPI specs, and client generation:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    """User account information"""
+    id: int = Field(description='Unique user identifier')
+    name: str = Field(description='User full name')
+    email: str = Field(description='User email address')
+    is_active: bool = Field(default=True, description='Account status')
+
+schema = User.model_json_schema()
+print(schema)
+```
+
+This generates a complete JSON Schema that can be used with:
+- OpenAPI/Swagger documentation
+- API client generators
+- Form builders
+- Validation in other languages
+
+## Serialization Control
+
+Powerful serialization with fine-grained control over output:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    name: str
+    password: str = Field(exclude=True)
+    internal_id: str = Field(alias='_id', serialization_alias='id')
+
+user = User(id=1, name='John', password='secret', _id='internal-123')
+
+# Password is excluded from serialization
+print(user.model_dump())
+#> {'id': 1, 'name': 'John', 'internal_id': 'internal-123'}
+
+print(user.model_dump_json())
+#> {"id":1,"name":"John","internal_id":"internal-123"}
+```
+
+## Error Handling
+
+Pydantic provides detailed, structured error information:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Model(BaseModel):
+    a: float
+    b: int = 10
+
+try:
+    Model(a='x', b='x')
+except ValidationError as e:
+    errors = e.errors()
+    print(errors)
+    '''
+    [
+        {
+            'type': 'float_parsing',
+            'loc': ('a',),
+            'msg': 'Input should be a valid number, unable to parse string as a number',
+            'input': 'x'
+        },
+        {
+            'type': 'int_parsing',
+            'loc': ('b',),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'input': 'x'
+        }
+    ]
+    '''
+```
+
+Each error includes:
+- `type`: Error type code
+- `loc`: Field location (supports nested fields)
+- `msg`: Human-readable message
+- `input`: The invalid input value
+
+## Ecosystem & Integrations
+
+Pydantic is the foundation for many popular Python projects:
+
+<CardGroup cols={2}>
+  <Card title="FastAPI" icon="bolt">
+    The modern web framework uses Pydantic for request/response validation
+  </Card>
+  
+  <Card title="LangChain" icon="link">
+    LLM application framework built on Pydantic models
+  </Card>
+  
+  <Card title="SQLModel" icon="database">
+    SQL databases with Python objects, powered by Pydantic
+  </Card>
+  
+  <Card title="Hugging Face" icon="face-smile">
+    Transformers library uses Pydantic for configuration
+  </Card>
+</CardGroup>
+
+## Production Ready
+
+<CardGroup cols={3}>
+  <Card title="Battle Tested" icon="shield-check">
+    Used by millions of developers worldwide in production systems
+  </Card>
+  
+  <Card title="Well Maintained" icon="wrench">
+    Active development and regular releases
+  </Card>
+  
+  <Card title="Comprehensive Docs" icon="book">
+    Extensive documentation with examples and guides
+  </Card>
+</CardGroup>
+
+## Developer Experience
+
+Pydantic is designed to be intuitive and productive:
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    a: int
+    b: int = 10
+
+# Simple and clean
+m = Model(a=5)
+print(m.a)  #> 5
+print(m.b)  #> 10
+
+# Easy serialization
+print(m.model_dump())      #> {'a': 5, 'b': 10}
+print(m.model_dump_json()) #> {"a":5,"b":10}
+
+# Helpful repr
+print(repr(m))  #> Model(a=5, b=10)
+```
+
+<Tip>
+Pydantic's API is designed to be intuitive. If you've used Python's `dataclasses` or `attrs`, you'll feel right at home.
+</Tip>
+
+## Next Steps
+
+Ready to get started?
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/get-started/installation">
+    Install Pydantic in your project
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/get-started/quickstart">
+    Build your first validated model
+  </Card>
+</CardGroup>

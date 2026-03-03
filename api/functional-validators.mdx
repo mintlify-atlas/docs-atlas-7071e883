@@ -1,0 +1,550 @@
+---
+title: Functional Validators
+description: API reference for Pydantic's functional validators including field_validator, model_validator, and validator classes.
+---
+
+Functional validators allow you to define custom validation logic for fields and models using decorators and annotated metadata classes.
+
+## Decorators
+
+### field_validator
+
+```python
+def field_validator(
+    field: str,
+    /,
+    *fields: str,
+    mode: Literal['before', 'after', 'wrap', 'plain'] = 'after',
+    check_fields: bool | None = None,
+    json_schema_input_type: Any = PydanticUndefined,
+) -> Callable[[Any], Any]
+```
+
+Decorate methods on a model class to validate one or more fields.
+
+<ParamField path="field" type="str" required>
+  The first field name to validate. At least one field name is required.
+</ParamField>
+
+<ParamField path="*fields" type="str">
+  Additional field names to validate with the same validator function.
+</ParamField>
+
+<ParamField path="mode" type="Literal['before', 'after', 'wrap', 'plain']" default="'after'">
+  Specifies when the validator runs:
+  - `'after'`: Runs after Pydantic's internal validation
+  - `'before'`: Runs before Pydantic's internal validation
+  - `'wrap'`: Wraps Pydantic's internal validation, receives a handler
+  - `'plain'`: Replaces Pydantic's internal validation entirely
+</ParamField>
+
+<ParamField path="check_fields" type="bool | None" default="None">
+  Whether to check that the specified fields actually exist on the model. When `None`, uses the model's configuration.
+</ParamField>
+
+<ParamField path="json_schema_input_type" type="Any" default="PydanticUndefined">
+  The input type for JSON Schema generation (validation mode). Only valid for `mode='before'`, `mode='plain'`, or `mode='wrap'`.
+</ParamField>
+
+#### Validator Function Signatures
+
+Depending on the mode and whether you need validation context, validators can have different signatures:
+
+**After/Before/Plain mode:**
+```python
+@field_validator('field_name')
+@classmethod
+def validate_field(cls, value: Any) -> Any:
+    # Validate and return the value
+    return value
+
+# With info argument for validation context:
+@field_validator('field_name')
+@classmethod
+def validate_field(cls, value: Any, info: ValidationInfo) -> Any:
+    return value
+```
+
+**Wrap mode:**
+```python
+@field_validator('field_name', mode='wrap')
+@classmethod
+def validate_field(
+    cls,
+    value: Any,
+    handler: ValidatorFunctionWrapHandler
+) -> Any:
+    # Optionally call handler(value) for default validation
+    return handler(value)
+
+# With info argument:
+@field_validator('field_name', mode='wrap')
+@classmethod
+def validate_field(
+    cls,
+    value: Any,
+    handler: ValidatorFunctionWrapHandler,
+    info: ValidationInfo
+) -> Any:
+    return handler(value)
+```
+
+<Note>
+The `@classmethod` decorator is automatically applied if not present, but it's recommended to include it explicitly.
+</Note>
+
+#### Example
+
+```python
+from typing import Any
+from pydantic import BaseModel, ValidationError, field_validator
+
+class Model(BaseModel):
+    a: str
+
+    @field_validator('a')
+    @classmethod
+    def ensure_foobar(cls, v: Any):
+        if 'foobar' not in v:
+            raise ValueError('"foobar" not found in a')
+        return v
+
+print(repr(Model(a='this is foobar good')))
+#> Model(a='this is foobar good')
+
+try:
+    Model(a='snap')
+except ValidationError as exc_info:
+    print(exc_info)
+    # 1 validation error for Model
+    # a
+    #   Value error, "foobar" not found in a
+```
+
+---
+
+### model_validator
+
+```python
+def model_validator(
+    *,
+    mode: Literal['wrap', 'before', 'after'],
+) -> Callable[[Any], PydanticDescriptorProxy[ModelValidatorDecoratorInfo]]
+```
+
+Decorate model methods to perform validation on the entire model.
+
+<ParamField path="mode" type="Literal['wrap', 'before', 'after']" required>
+  Specifies when the validator runs:
+  - `'after'`: Runs after the model is fully validated. Receives the model instance.
+  - `'before'`: Runs before model validation. Receives the raw input data.
+  - `'wrap'`: Wraps the model validation. Receives raw input and a handler function.
+</ParamField>
+
+#### Validator Function Signatures
+
+**After mode (instance method):**
+```python
+from typing_extensions import Self
+
+@model_validator(mode='after')
+def validate_model(self) -> Self:
+    # Validate the model instance
+    return self
+```
+
+**Before mode (classmethod):**
+```python
+@model_validator(mode='before')
+@classmethod
+def validate_model(cls, value: Any) -> Any:
+    # value can be a dict, model instance, or any input
+    return value
+
+# With info argument:
+@model_validator(mode='before')
+@classmethod
+def validate_model(cls, value: Any, info: ValidationInfo) -> Any:
+    return value
+```
+
+**Wrap mode (classmethod):**
+```python
+@model_validator(mode='wrap')
+@classmethod
+def validate_model(
+    cls,
+    value: Any,
+    handler: ModelWrapValidatorHandler,
+) -> ModelType:
+    # Call handler to perform default validation
+    return handler(value)
+
+# With info argument:
+@model_validator(mode='wrap')
+@classmethod
+def validate_model(
+    cls,
+    value: Any,
+    handler: ModelWrapValidatorHandler,
+    info: ValidationInfo,
+) -> ModelType:
+    return handler(value)
+```
+
+<Warning>
+For `mode='after'`, using `@classmethod` is deprecated as of Pydantic 2.12. Use an instance method instead.
+</Warning>
+
+#### Example
+
+```python
+from typing_extensions import Self
+from pydantic import BaseModel, ValidationError, model_validator
+
+class Square(BaseModel):
+    width: float
+    height: float
+
+    @model_validator(mode='after')
+    def verify_square(self) -> Self:
+        if self.width != self.height:
+            raise ValueError('width and height do not match')
+        return self
+
+s = Square(width=1, height=1)
+print(repr(s))
+#> Square(width=1.0, height=1.0)
+
+try:
+    Square(width=1, height=2)
+except ValidationError as e:
+    print(e)
+    # 1 validation error for Square
+    #   Value error, width and height do not match
+```
+
+---
+
+## Validator Classes
+
+Validator classes are used with `typing.Annotated` to apply validation logic to type annotations.
+
+### AfterValidator
+
+```python
+@dataclass
+class AfterValidator:
+    func: NoInfoValidatorFunction | WithInfoValidatorFunction
+```
+
+A metadata class that applies validation **after** Pydantic's internal validation logic.
+
+<ParamField path="func" type="NoInfoValidatorFunction | WithInfoValidatorFunction" required>
+  The validator function. Can accept just the value, or both value and `ValidationInfo`.
+</ParamField>
+
+#### Function Signatures
+
+```python
+# Without info:
+def validator(value: Any) -> Any:
+    return value
+
+# With info:
+def validator(value: Any, info: ValidationInfo) -> Any:
+    return value
+```
+
+#### Example
+
+```python
+from typing import Annotated
+from pydantic import AfterValidator, BaseModel, ValidationError
+
+MyInt = Annotated[int, AfterValidator(lambda v: v + 1)]
+
+class Model(BaseModel):
+    a: MyInt
+
+print(Model(a=1).a)
+#> 2
+
+try:
+    Model(a='a')
+except ValidationError as e:
+    print(e)
+    # type: int_parsing
+    # Input should be a valid integer
+```
+
+---
+
+### BeforeValidator
+
+```python
+@dataclass
+class BeforeValidator:
+    func: NoInfoValidatorFunction | WithInfoValidatorFunction
+    json_schema_input_type: Any = PydanticUndefined
+```
+
+A metadata class that applies validation **before** Pydantic's internal validation logic.
+
+<ParamField path="func" type="NoInfoValidatorFunction | WithInfoValidatorFunction" required>
+  The validator function. Can accept just the value, or both value and `ValidationInfo`.
+</ParamField>
+
+<ParamField path="json_schema_input_type" type="Any" default="PydanticUndefined">
+  The input type used to generate the appropriate JSON Schema (in validation mode). The actual input type is `Any`.
+</ParamField>
+
+#### Example
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, BeforeValidator
+
+MyInt = Annotated[int, BeforeValidator(lambda v: v + 1)]
+
+class Model(BaseModel):
+    a: MyInt
+
+print(Model(a=1).a)
+#> 2
+
+try:
+    Model(a='a')
+except TypeError as e:
+    print(e)
+    #> can only concatenate str (not "int") to str
+```
+
+---
+
+### PlainValidator
+
+```python
+@dataclass
+class PlainValidator:
+    func: NoInfoValidatorFunction | WithInfoValidatorFunction
+    json_schema_input_type: Any = Any
+```
+
+A metadata class that replaces Pydantic's internal validation logic entirely with custom validation.
+
+<ParamField path="func" type="NoInfoValidatorFunction | WithInfoValidatorFunction" required>
+  The validator function that performs all validation.
+</ParamField>
+
+<ParamField path="json_schema_input_type" type="Any" default="Any">
+  The input type used to generate the appropriate JSON Schema (in validation mode). This helps JSON schema generation understand what types are accepted.
+</ParamField>
+
+<Note>
+Before v2.9, `PlainValidator` wasn't fully compatible with JSON Schema generation for `mode='validation'`. The `json_schema_input_type` parameter was added to resolve this.
+</Note>
+
+#### Example
+
+```python
+from typing import Annotated, Union
+from pydantic import BaseModel, PlainValidator
+
+def validate(v: object) -> int:
+    if not isinstance(v, (int, str)):
+        raise ValueError(f'Expected int or str, got {type(v)}')
+    return int(v) + 1
+
+MyInt = Annotated[
+    int,
+    PlainValidator(validate, json_schema_input_type=Union[str, int]),
+]
+
+class Model(BaseModel):
+    a: MyInt
+
+print(Model(a='1').a)
+#> 2
+
+print(Model(a=1).a)
+#> 2
+```
+
+---
+
+### WrapValidator
+
+```python
+@dataclass
+class WrapValidator:
+    func: NoInfoWrapValidatorFunction | WithInfoWrapValidatorFunction
+    json_schema_input_type: Any = PydanticUndefined
+```
+
+A metadata class that wraps Pydantic's internal validation logic, allowing you to run code before and after validation, or conditionally call the validator.
+
+<ParamField path="func" type="NoInfoWrapValidatorFunction | WithInfoWrapValidatorFunction" required>
+  The wrap validator function. Receives the value and a handler function to call the default validation.
+</ParamField>
+
+<ParamField path="json_schema_input_type" type="Any" default="PydanticUndefined">
+  The input type used to generate the appropriate JSON Schema (in validation mode).
+</ParamField>
+
+#### Function Signatures
+
+```python
+# Without info:
+def wrap_validator(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+    # Optionally transform before validation
+    result = handler(value)
+    # Optionally transform after validation
+    return result
+
+# With info:
+def wrap_validator(
+    value: Any,
+    handler: ValidatorFunctionWrapHandler,
+    info: ValidationInfo
+) -> Any:
+    return handler(value)
+```
+
+#### Example
+
+```python
+from datetime import datetime
+from typing import Annotated
+from pydantic import BaseModel, ValidationError, WrapValidator
+
+def validate_timestamp(v, handler):
+    if v == 'now':
+        # Skip further validation and return custom value
+        return datetime.now()
+    try:
+        return handler(v)
+    except ValidationError:
+        # Validation failed, return default
+        return datetime(2000, 1, 1)
+
+MyTimestamp = Annotated[datetime, WrapValidator(validate_timestamp)]
+
+class Model(BaseModel):
+    a: MyTimestamp
+
+print(Model(a='now').a)
+#> 2024-01-02 03:04:05.000006
+
+print(Model(a='invalid').a)
+#> 2000-01-01 00:00:00
+```
+
+---
+
+## Additional Classes
+
+### InstanceOf
+
+```python
+class InstanceOf:
+    @classmethod
+    def __class_getitem__(cls, item: AnyType) -> AnyType
+```
+
+Generic type for annotating that a value must be an instance of a specific class.
+
+#### Example
+
+```python
+from pydantic import BaseModel, InstanceOf
+
+class Foo:
+    pass
+
+class Bar(BaseModel):
+    foo: InstanceOf[Foo]
+
+Bar(foo=Foo())  # Valid
+
+try:
+    Bar(foo=42)
+except ValidationError as e:
+    print(e)
+    # Input should be an instance of Foo
+```
+
+---
+
+### SkipValidation
+
+```python
+class SkipValidation:
+    @classmethod
+    def __class_getitem__(cls, item: Any) -> Any
+```
+
+Annotation that skips validation for a field. Use when you want type annotations for documentation/IDE purposes but know it's safe to skip validation.
+
+<Warning>
+Because this converts the validation schema to `any_schema`, subsequent annotation-applied transformations may not work as expected. This should generally be the final annotation applied to a type.
+</Warning>
+
+#### Example
+
+```python
+from pydantic import BaseModel, SkipValidation
+
+class Model(BaseModel):
+    a: SkipValidation[int]
+
+Model(a='not an int')  # No validation error
+```
+
+---
+
+### ValidateAs
+
+```python
+class ValidateAs:
+    def __init__(
+        self,
+        from_type: type[_FromTypeT],
+        /,
+        instantiation_hook: Callable[[_FromTypeT], Any]
+    ) -> None
+```
+
+Validate a custom type using a type that Pydantic natively supports, then transform the result.
+
+<ParamField path="from_type" type="type[_FromTypeT]" required>
+  The type natively supported by Pydantic to use for validation.
+</ParamField>
+
+<ParamField path="instantiation_hook" type="Callable[[_FromTypeT], Any]" required>
+  A callable that takes the validated value and returns the populated custom type.
+</ParamField>
+
+#### Example
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, TypeAdapter, ValidateAs
+
+class MyCls:
+    def __init__(self, a: int) -> None:
+        self.a = a
+    
+    def __repr__(self) -> str:
+        return f"MyCls(a={self.a})"
+
+class Model(BaseModel):
+    a: int
+
+ta = TypeAdapter(
+    Annotated[MyCls, ValidateAs(Model, lambda v: MyCls(a=v.a))]
+)
+
+print(ta.validate_python({'a': 1}))
+#> MyCls(a=1)
+```

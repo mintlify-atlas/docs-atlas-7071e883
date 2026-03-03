@@ -1,0 +1,461 @@
+---
+title: Validation Basics
+description: Essential patterns for validating data with Pydantic models
+---
+
+# Validation Basics
+
+This guide covers fundamental validation patterns and common use cases with Pydantic. Learn how to validate data types, handle errors, and apply constraints effectively.
+
+## Simple Field Validation
+
+The most basic use of Pydantic is validating that data matches the expected types:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+    age: int
+
+user = User(id='123', name='Jane Doe', email='jane@example.com', age='25')
+print(user)
+# User(id=123, name='Jane Doe', email='jane@example.com', age=25)
+print(user.id, type(user.id))
+# 123 <class 'int'>
+```
+
+Notice that string `'123'` was automatically coerced to integer `123`. Pydantic performs intelligent type coercion when possible.
+
+## Handling Validation Errors
+
+When validation fails, Pydantic raises a `ValidationError` with detailed information:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Product(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+try:
+    product = Product(name='Widget', price='not-a-number', quantity='5')
+except ValidationError as e:
+    print(e)
+    """
+    1 validation error for Product
+    price
+      Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='not-a-number', input_type=str]
+    """
+```
+
+Access structured error details:
+
+```python
+try:
+    product = Product(name=123, price='abc', quantity=None)
+except ValidationError as e:
+    for error in e.errors():
+        print(f"Field: {error['loc'][0]}")
+        print(f"Error: {error['msg']}")
+        print(f"Type: {error['type']}")
+        print("---")
+```
+
+<Note>
+The `errors()` method returns a list of dictionaries, each containing:
+- `loc`: The field location (tuple of field names)
+- `msg`: Human-readable error message
+- `type`: Error type identifier
+- `input`: The invalid input value
+</Note>
+
+## Union Types and Optional Fields
+
+Handle multiple acceptable types and optional values:
+
+```python
+from typing import Union, Optional
+from pydantic import BaseModel
+
+class FlexibleModel(BaseModel):
+    # Accepts either int or string
+    value: Union[int, str]
+    # Optional field (can be None)
+    description: Optional[str] = None
+    # Required but accepts multiple types
+    data: Union[list, dict]
+
+# Valid instances
+m1 = FlexibleModel(value=42, data=[])
+m2 = FlexibleModel(value='hello', data={}, description='test')
+m3 = FlexibleModel(value=100, data=[1, 2, 3])
+```
+
+## Field Constraints
+
+Apply validation constraints using `Field()`:
+
+```python
+from pydantic import BaseModel, Field
+
+class Article(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=10)
+    views: int = Field(ge=0, description="Must be non-negative")
+    rating: float = Field(ge=0.0, le=5.0)
+    tags: list[str] = Field(max_length=10)
+
+# Valid
+article = Article(
+    title="Introduction to Pydantic",
+    content="This is a comprehensive guide to using Pydantic...",
+    views=1500,
+    rating=4.5,
+    tags=['python', 'validation']
+)
+
+# Invalid - rating out of range
+try:
+    Article(
+        title="Test",
+        content="Short content here",
+        views=0,
+        rating=6.0,  # Too high!
+        tags=[]
+    )
+except ValidationError as e:
+    print(e)
+```
+
+<Tip>
+Common constraint parameters:
+- `gt`, `ge`: Greater than, greater than or equal
+- `lt`, `le`: Less than, less than or equal  
+- `min_length`, `max_length`: String/collection length
+- `pattern`: Regex pattern for strings
+</Tip>
+
+## Nested Models
+
+Validate complex nested data structures:
+
+```python
+from pydantic import BaseModel
+from typing import List
+
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str
+    postal_code: str
+
+class Company(BaseModel):
+    name: str
+    address: Address
+    employees: int
+
+class Employee(BaseModel):
+    name: str
+    employee_id: int
+    company: Company
+    previous_addresses: List[Address] = []
+
+# Validate nested structure
+employee_data = {
+    'name': 'John Smith',
+    'employee_id': 12345,
+    'company': {
+        'name': 'Tech Corp',
+        'address': {
+            'street': '123 Main St',
+            'city': 'San Francisco',
+            'country': 'USA',
+            'postal_code': '94105'
+        },
+        'employees': 500
+    },
+    'previous_addresses': [
+        {
+            'street': '456 Oak Ave',
+            'city': 'Portland',
+            'country': 'USA',
+            'postal_code': '97201'
+        }
+    ]
+}
+
+employee = Employee(**employee_data)
+print(employee.company.address.city)  # San Francisco
+```
+
+## Lists, Sets, and Dictionaries
+
+```python
+from pydantic import BaseModel
+from typing import List, Set, Dict
+
+class DataCollection(BaseModel):
+    # List of specific type
+    numbers: List[int]
+    # Set (removes duplicates)
+    unique_tags: Set[str]
+    # Dictionary with typed keys and values
+    metadata: Dict[str, str]
+    # Nested collections
+    matrix: List[List[float]]
+
+data = DataCollection(
+    numbers=[1, 2, 3, '4'],  # '4' converted to int
+    unique_tags=['python', 'pydantic', 'python'],  # Duplicates removed
+    metadata={'author': 'Jane', 'version': '1.0'},
+    matrix=[[1.0, 2.0], [3.0, 4.0]]
+)
+
+print(data.numbers)  # [1, 2, 3, 4]
+print(data.unique_tags)  # {'python', 'pydantic'}
+```
+
+## Strict Mode
+
+Disable type coercion for strict validation:
+
+```python
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
+
+# Strict mode for entire model
+class StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    value: int
+    name: str
+
+# This will fail - no coercion allowed
+try:
+    StrictModel(value='123', name='test')
+except ValidationError as e:
+    print(e)
+
+# Strict mode for specific field
+class MixedModel(BaseModel):
+    strict_field: int = Field(strict=True)
+    loose_field: int
+
+# strict_field must be exactly int, loose_field can be coerced
+m = MixedModel(strict_field=100, loose_field='200')
+print(m)  # strict_field=100 loose_field=200
+```
+
+## Model Validation Methods
+
+<Steps>
+
+### Step 1: Validate Python Objects
+
+Use `model_validate()` to validate dictionaries or objects:
+
+```python
+from pydantic import BaseModel
+
+class Config(BaseModel):
+    host: str
+    port: int
+
+config_dict = {'host': 'localhost', 'port': '8080'}
+config = Config.model_validate(config_dict)
+print(config)  # Config(host='localhost', port=8080)
+```
+
+### Step 2: Validate JSON
+
+Use `model_validate_json()` for JSON strings:
+
+```python
+import json
+
+json_data = '{"host": "api.example.com", "port": 443}'
+config = Config.model_validate_json(json_data)
+print(config.host)  # api.example.com
+```
+
+### Step 3: Serialize Models
+
+Convert models back to dictionaries or JSON:
+
+```python
+config = Config(host='localhost', port=8080)
+
+# To dictionary
+print(config.model_dump())
+# {'host': 'localhost', 'port': 8080}
+
+# To JSON string
+print(config.model_dump_json())
+# {"host":"localhost","port":8080}
+```
+
+</Steps>
+
+## Default Values and Factories
+
+```python
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import List
+
+class BlogPost(BaseModel):
+    title: str
+    content: str
+    # Simple default
+    published: bool = False
+    # Default from Field
+    views: int = Field(default=0)
+    # Default factory for mutable defaults
+    tags: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+post1 = BlogPost(title='Hello', content='World')
+post2 = BlogPost(title='Test', content='Content')
+
+# Each instance gets its own list
+post1.tags.append('python')
+print(post1.tags)  # ['python']
+print(post2.tags)  # []
+```
+
+<Note>
+Always use `default_factory` for mutable defaults (lists, dicts, sets) to avoid sharing the same instance across all model instances.
+</Note>
+
+## Validating from Attributes
+
+Validate objects with attributes using `from_attributes` config:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class ORMModel:
+    """Simulates a database ORM model"""
+    def __init__(self, id, username, email):
+        self.id = id
+        self.username = username
+        self.email = email
+
+class UserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    username: str
+    email: str
+
+# Validate from ORM instance
+orm_user = ORMModel(id=1, username='john', email='john@example.com')
+user = UserSchema.model_validate(orm_user)
+print(user.model_dump())
+# {'id': 1, 'username': 'john', 'email': 'john@example.com'}
+```
+
+## Common Validation Patterns
+
+### Email Validation
+
+```python
+from pydantic import BaseModel, EmailStr
+
+class UserContact(BaseModel):
+    email: EmailStr
+    backup_email: EmailStr | None = None
+
+user = UserContact(email='user@example.com')
+print(user.email)  # user@example.com
+```
+
+### URL Validation
+
+```python
+from pydantic import BaseModel, HttpUrl
+
+class WebResource(BaseModel):
+    url: HttpUrl
+    
+resource = WebResource(url='https://example.com/api/endpoint')
+print(resource.url)  # https://example.com/api/endpoint
+```
+
+### UUID Validation
+
+```python
+from pydantic import BaseModel
+from uuid import UUID, uuid4
+
+class Item(BaseModel):
+    id: UUID
+    name: str
+
+# Accepts UUID objects or strings
+item = Item(id=uuid4(), name='Widget')
+item2 = Item(id='123e4567-e89b-12d3-a456-426614174000', name='Gadget')
+```
+
+### Datetime Validation
+
+```python
+from pydantic import BaseModel
+from datetime import datetime, date
+
+class Event(BaseModel):
+    name: str
+    start_time: datetime
+    end_date: date
+
+# Accepts datetime objects or ISO format strings
+event = Event(
+    name='Conference',
+    start_time='2024-03-15T09:00:00',
+    end_date='2024-03-17'
+)
+
+print(event.start_time)  # datetime object
+print(event.end_date)    # date object
+```
+
+## Immutable Models
+
+Create frozen (immutable) models:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class ImmutableConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    
+    api_key: str
+    secret: str
+
+config = ImmutableConfig(api_key='key123', secret='secret456')
+
+# Attempting to modify raises an error
+try:
+    config.api_key = 'new_key'
+except ValidationError as e:
+    print("Cannot modify frozen model")
+```
+
+## Summary
+
+Pydantic validation basics include:
+
+- Automatic type coercion and validation
+- Rich error messages with detailed information
+- Field constraints (length, range, patterns)
+- Nested model validation
+- Collections (lists, sets, dicts) with typed elements
+- Strict mode for exact type matching
+- Default values and factories
+- Built-in validators for common types (email, URL, UUID, datetime)
+- Immutable models with frozen config
+
+These patterns form the foundation for building robust, type-safe Python applications.

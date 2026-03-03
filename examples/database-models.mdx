@@ -1,0 +1,588 @@
+---
+title: Database Models
+description: Integrate Pydantic with ORMs like SQLAlchemy for database operations
+---
+
+# Database Models with Pydantic
+
+Pydantic models work seamlessly with database ORMs to validate data going to and from databases. This guide covers SQLAlchemy integration, validation patterns, and best practices.
+
+## SQLAlchemy Integration
+
+Use Pydantic models alongside SQLAlchemy for validation:
+
+```python
+import sqlalchemy as sa
+from sqlalchemy.orm import declarative_base, Session
+from pydantic import BaseModel, ConfigDict, Field, EmailStr
+from typing import Optional
+from datetime import datetime
+
+Base = declarative_base()
+
+# SQLAlchemy ORM Model
+class UserTable(Base):
+    __tablename__ = 'users'
+    
+    id = sa.Column(sa.Integer, primary_key=True)
+    username = sa.Column(sa.String(50), unique=True, nullable=False)
+    email = sa.Column(sa.String(100), unique=True, nullable=False)
+    full_name = sa.Column(sa.String(100))
+    hashed_password = sa.Column(sa.String(255), nullable=False)
+    is_active = sa.Column(sa.Boolean, default=True)
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+
+# Pydantic Schema Models
+class UserBase(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    email: EmailStr
+    full_name: str
+
+class UserCreate(UserBase):
+    """Schema for creating users"""
+    password: str = Field(min_length=8)
+
+class UserUpdate(BaseModel):
+    """Schema for updating users - all fields optional"""
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserInDB(UserBase):
+    """Schema for database retrieval"""
+    id: int
+    is_active: bool
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class UserPublic(UserBase):
+    """Schema for API responses - excludes sensitive data"""
+    id: int
+    is_active: bool
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+```
+
+## CRUD Operations with Validation
+
+<Steps>
+
+### Step 1: Create
+
+Validate input and create database records:
+
+```python
+def create_user(db: Session, user_data: UserCreate) -> UserPublic:
+    """Create a new user with validation"""
+    # Hash password (simplified)
+    hashed_password = f"hashed_{user_data.password}"
+    
+    # Create ORM instance
+    db_user = UserTable(
+        username=user_data.username,
+        email=user_data.email,
+        full_name=user_data.full_name,
+        hashed_password=hashed_password
+    )
+    
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    # Convert to Pydantic model for response
+    return UserPublic.model_validate(db_user)
+```
+
+### Step 2: Read
+
+Retrieve and validate database records:
+
+```python
+def get_user(db: Session, user_id: int) -> Optional[UserPublic]:
+    """Get user by ID"""
+    db_user = db.query(UserTable).filter(UserTable.id == user_id).first()
+    
+    if db_user is None:
+        return None
+    
+    # Automatically validates and converts
+    return UserPublic.model_validate(db_user)
+
+def get_users(db: Session, skip: int = 0, limit: int = 100) -> list[UserPublic]:
+    """Get multiple users"""
+    db_users = db.query(UserTable).offset(skip).limit(limit).all()
+    return [UserPublic.model_validate(user) for user in db_users]
+```
+
+### Step 3: Update
+
+Validate partial updates:
+
+```python
+def update_user(
+    db: Session,
+    user_id: int,
+    user_update: UserUpdate
+) -> Optional[UserPublic]:
+    """Update user with partial data"""
+    db_user = db.query(UserTable).filter(UserTable.id == user_id).first()
+    
+    if db_user is None:
+        return None
+    
+    # Update only provided fields
+    update_data = user_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_user, field, value)
+    
+    db.commit()
+    db.refresh(db_user)
+    
+    return UserPublic.model_validate(db_user)
+```
+
+### Step 4: Delete
+
+```python
+def delete_user(db: Session, user_id: int) -> bool:
+    """Delete user by ID"""
+    db_user = db.query(UserTable).filter(UserTable.id == user_id).first()
+    
+    if db_user is None:
+        return False
+    
+    db.delete(db_user)
+    db.commit()
+    return True
+```
+
+</Steps>
+
+## Handling Reserved SQLAlchemy Fields
+
+Avoid conflicts with SQLAlchemy reserved words using aliases:
+
+```python
+import sqlalchemy as sa
+from sqlalchemy.orm import declarative_base
+from pydantic import BaseModel, ConfigDict, Field
+
+Base = declarative_base()
+
+class MyTable(Base):
+    __tablename__ = 'my_table'
+    id = sa.Column(sa.Integer, primary_key=True)
+    # 'metadata' is reserved by SQLAlchemy
+    metadata_ = sa.Column('metadata', sa.JSON)
+
+class MyModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    # Use alias to map to SQLAlchemy's metadata_
+    metadata: dict[str, str] = Field(alias='metadata_')
+
+# Usage
+sql_model = MyTable(id=1, metadata_={'key': 'value'})
+pydantic_model = MyModel.model_validate(sql_model)
+
+print(pydantic_model.model_dump())
+# {'metadata': {'key': 'value'}}
+
+print(pydantic_model.model_dump(by_alias=True))
+# {'metadata_': {'key': 'value'}}
+```
+
+<Note>
+The `from_attributes=True` config tells Pydantic to read data from object attributes (like SQLAlchemy models) instead of expecting dictionaries.
+</Note>
+
+## Relationships and Nested Models
+
+Handle SQLAlchemy relationships:
+
+```python
+import sqlalchemy as sa
+from sqlalchemy.orm import relationship, declarative_base
+from pydantic import BaseModel, ConfigDict
+from typing import List, Optional
+from datetime import datetime
+
+Base = declarative_base()
+
+# SQLAlchemy Models
+class AuthorTable(Base):
+    __tablename__ = 'authors'
+    
+    id = sa.Column(sa.Integer, primary_key=True)
+    name = sa.Column(sa.String(100), nullable=False)
+    email = sa.Column(sa.String(100), unique=True)
+    
+    posts = relationship('PostTable', back_populates='author')
+
+class PostTable(Base):
+    __tablename__ = 'posts'
+    
+    id = sa.Column(sa.Integer, primary_key=True)
+    title = sa.Column(sa.String(200), nullable=False)
+    content = sa.Column(sa.Text, nullable=False)
+    author_id = sa.Column(sa.Integer, sa.ForeignKey('authors.id'))
+    published_at = sa.Column(sa.DateTime, nullable=True)
+    
+    author = relationship('AuthorTable', back_populates='posts')
+
+# Pydantic Schemas
+class AuthorBase(BaseModel):
+    name: str
+    email: str
+
+class AuthorPublic(AuthorBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class PostBase(BaseModel):
+    title: str
+    content: str
+
+class PostCreate(PostBase):
+    author_id: int
+
+class PostPublic(PostBase):
+    id: int
+    author: AuthorPublic  # Nested relationship
+    published_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class AuthorWithPosts(AuthorPublic):
+    posts: List[PostPublic] = []  # Include related posts
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# Usage
+def get_author_with_posts(db: Session, author_id: int) -> Optional[AuthorWithPosts]:
+    author = db.query(AuthorTable).filter(AuthorTable.id == author_id).first()
+    if author is None:
+        return None
+    return AuthorWithPosts.model_validate(author)
+```
+
+## Validation Before Database Insert
+
+Prevent invalid data from reaching the database:
+
+```python
+from pydantic import BaseModel, field_validator, model_validator
+from typing_extensions import Self
+import re
+
+class ProductCreate(BaseModel):
+    name: str
+    sku: str
+    price: float
+    category: str
+    
+    @field_validator('sku')
+    @classmethod
+    def validate_sku(cls, v: str) -> str:
+        # SKU must be uppercase alphanumeric
+        if not re.match(r'^[A-Z0-9]{6,12}$', v):
+            raise ValueError('SKU must be 6-12 uppercase alphanumeric characters')
+        return v
+    
+    @field_validator('price')
+    @classmethod
+    def validate_price(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Price must be positive')
+        if v > 1000000:
+            raise ValueError('Price exceeds maximum allowed')
+        return round(v, 2)  # Round to 2 decimal places
+    
+    @model_validator(mode='after')
+    def validate_category_price(self) -> Self:
+        # Business rule: luxury items must be expensive
+        if self.category == 'luxury' and self.price < 100:
+            raise ValueError('Luxury items must be priced at least $100')
+        return self
+
+# This validates before hitting the database
+def create_product(db: Session, product: ProductCreate):
+    # product is already validated by Pydantic
+    db_product = ProductTable(**product.model_dump())
+    db.add(db_product)
+    db.commit()
+    return db_product
+```
+
+## Database Transactions with Validation
+
+```python
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, ValidationError
+from typing import List
+
+class OrderItem(BaseModel):
+    product_id: int
+    quantity: int
+    price: float
+
+class OrderCreate(BaseModel):
+    customer_id: int
+    items: List[OrderItem]
+    
+    @model_validator(mode='after')
+    def validate_items(self) -> 'OrderCreate':
+        if not self.items:
+            raise ValueError('Order must have at least one item')
+        return self
+
+def create_order(db: Session, order_data: OrderCreate):
+    """Create order with transactional safety"""
+    try:
+        # Start transaction
+        order = OrderTable(
+            customer_id=order_data.customer_id,
+            total=sum(item.price * item.quantity for item in order_data.items)
+        )
+        db.add(order)
+        db.flush()  # Get order.id without committing
+        
+        # Add order items
+        for item_data in order_data.items:
+            order_item = OrderItemTable(
+                order_id=order.id,
+                product_id=item_data.product_id,
+                quantity=item_data.quantity,
+                price=item_data.price
+            )
+            db.add(order_item)
+        
+        # Commit transaction
+        db.commit()
+        db.refresh(order)
+        return order
+        
+    except ValidationError as e:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise
+```
+
+## Bulk Operations with Validation
+
+<CodeGroup>
+
+```python Bulk Insert
+from pydantic import BaseModel, ValidationError
+from typing import List
+
+class UserBulkCreate(BaseModel):
+    users: List[UserCreate]
+    
+    @model_validator(mode='after')
+    def validate_unique_emails(self) -> 'UserBulkCreate':
+        emails = [u.email for u in self.users]
+        if len(emails) != len(set(emails)):
+            raise ValueError('Duplicate emails in bulk insert')
+        return self
+
+def bulk_create_users(db: Session, bulk_data: UserBulkCreate) -> List[UserPublic]:
+    """Efficiently create multiple users"""
+    db_users = [
+        UserTable(
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            hashed_password=f"hashed_{user.password}"
+        )
+        for user in bulk_data.users
+    ]
+    
+    db.bulk_save_objects(db_users)
+    db.commit()
+    
+    # Refresh and return
+    return [UserPublic.model_validate(u) for u in db_users]
+```
+
+```python Bulk Update
+from pydantic import BaseModel
+from typing import List, Dict, Any
+
+class BulkUpdateItem(BaseModel):
+    id: int
+    updates: Dict[str, Any]
+
+class ProductBulkUpdate(BaseModel):
+    items: List[BulkUpdateItem]
+
+def bulk_update_products(db: Session, bulk_update: ProductBulkUpdate):
+    """Update multiple products efficiently"""
+    for item in bulk_update.items:
+        db.query(ProductTable).filter(
+            ProductTable.id == item.id
+        ).update(item.updates)
+    
+    db.commit()
+```
+
+</CodeGroup>
+
+## Soft Deletes
+
+```python
+import sqlalchemy as sa
+from sqlalchemy.orm import declarative_base
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from typing import Optional
+
+Base = declarative_base()
+
+class SoftDeleteTable(Base):
+    __tablename__ = 'items'
+    
+    id = sa.Column(sa.Integer, primary_key=True)
+    name = sa.Column(sa.String(100))
+    deleted_at = sa.Column(sa.DateTime, nullable=True)
+    
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
+
+class ItemPublic(BaseModel):
+    id: int
+    name: str
+    deleted_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
+
+def soft_delete_item(db: Session, item_id: int) -> Optional[ItemPublic]:
+    """Soft delete - mark as deleted instead of removing"""
+    item = db.query(SoftDeleteTable).filter(
+        SoftDeleteTable.id == item_id
+    ).first()
+    
+    if item is None:
+        return None
+    
+    item.deleted_at = datetime.utcnow()
+    db.commit()
+    db.refresh(item)
+    
+    return ItemPublic.model_validate(item)
+
+def get_active_items(db: Session) -> List[ItemPublic]:
+    """Get only non-deleted items"""
+    items = db.query(SoftDeleteTable).filter(
+        SoftDeleteTable.deleted_at.is_(None)
+    ).all()
+    
+    return [ItemPublic.model_validate(item) for item in items]
+```
+
+<Tip>
+Soft deletes preserve data history and allow for recovery, while hard deletes permanently remove records. Use soft deletes for:
+- User data (GDPR compliance may require eventual hard delete)
+- Financial records
+- Audit trail requirements
+</Tip>
+
+## Database-Generated Fields
+
+Handle auto-generated fields properly:
+
+```python
+import sqlalchemy as sa
+from sqlalchemy.orm import declarative_base
+from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+Base = declarative_base()
+
+class RecordTable(Base):
+    __tablename__ = 'records'
+    
+    # Database-generated fields
+    id = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    uuid = sa.Column(sa.String(36), unique=True, default=lambda: str(uuid4()))
+    created_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    updated_at = sa.Column(sa.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # User-provided fields
+    title = sa.Column(sa.String(200), nullable=False)
+    content = sa.Column(sa.Text)
+
+class RecordCreate(BaseModel):
+    """Only user-provided fields"""
+    title: str
+    content: Optional[str] = None
+
+class RecordInDB(BaseModel):
+    """All fields including database-generated"""
+    id: int
+    uuid: UUID
+    created_at: datetime
+    updated_at: datetime
+    title: str
+    content: Optional[str]
+    
+    model_config = ConfigDict(from_attributes=True)
+```
+
+## Query Result Validation
+
+```python
+from pydantic import BaseModel, ConfigDict
+from typing import List
+from sqlalchemy import func
+
+class UserStats(BaseModel):
+    """Validate aggregate query results"""
+    total_users: int
+    active_users: int
+    inactive_users: int
+    avg_posts_per_user: float
+    
+    model_config = ConfigDict(from_attributes=True)
+
+def get_user_stats(db: Session) -> UserStats:
+    """Get aggregated statistics"""
+    result = db.query(
+        func.count(UserTable.id).label('total_users'),
+        func.sum(sa.case((UserTable.is_active == True, 1), else_=0)).label('active_users'),
+        func.sum(sa.case((UserTable.is_active == False, 1), else_=0)).label('inactive_users'),
+        func.avg(func.count(PostTable.id)).label('avg_posts_per_user')
+    ).outerjoin(PostTable).first()
+    
+    # Validate query result
+    return UserStats.model_validate(result)
+```
+
+## Summary
+
+Database integration with Pydantic provides:
+
+- Separate schema models for create, update, and response operations
+- Validation before data reaches the database
+- Seamless conversion between ORM and Pydantic models with `from_attributes=True`
+- Field aliases to handle reserved SQLAlchemy keywords
+- Relationship handling with nested models
+- Transaction safety with validation
+- Bulk operations with validation
+- Soft delete patterns
+- Database-generated field handling
+- Query result validation
+
+This separation of concerns keeps your database layer clean while ensuring data integrity through Pydantic's validation.

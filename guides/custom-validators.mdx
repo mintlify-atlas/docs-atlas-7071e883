@@ -1,0 +1,490 @@
+---
+title: Custom Validators
+description: Learn how to create custom validators, use built-in validators, and make validators reusable across your Pydantic models
+---
+
+Pydantic allows you to create custom validators to enforce complex business logic and data integrity rules beyond basic type checking.
+
+## Understanding Validator Types
+
+Pydantic provides four types of field validators, each running at different stages of validation:
+
+<Steps>
+
+<Step title="Before Validators">
+  Run before Pydantic's internal validation. Receive raw input of any type.
+</Step>
+
+<Step title="After Validators">
+  Run after Pydantic's internal validation. Receive typed, validated values.
+</Step>
+
+<Step title="Plain Validators">
+  Replace Pydantic's validation entirely. You control all validation logic.
+</Step>
+
+<Step title="Wrap Validators">
+  Wrap around Pydantic's validation. Can run code before and after internal validation.
+</Step>
+
+</Steps>
+
+## After Validators
+
+Most commonly used - validate already-typed data:
+
+### Using the Annotated Pattern
+
+```python
+from typing import Annotated
+from pydantic import AfterValidator, BaseModel, ValidationError
+
+def is_even(value: int) -> int:
+    if value % 2 == 1:
+        raise ValueError(f'{value} is not an even number')
+    return value
+
+class Model(BaseModel):
+    number: Annotated[int, AfterValidator(is_even)]
+
+print(Model(number=2))
+# Output: number=2
+
+try:
+    Model(number=1)
+except ValidationError as e:
+    print(e)
+    # 1 validation error for Model
+    # number
+    #   Value error, 1 is not an even number
+```
+
+### Using the Decorator Pattern
+
+```python
+from pydantic import BaseModel, ValidationError, field_validator
+
+class Model(BaseModel):
+    number: int
+    
+    @field_validator('number')
+    @classmethod
+    def is_even(cls, value: int) -> int:
+        if value % 2 == 1:
+            raise ValueError(f'{value} is not an even number')
+        return value
+
+print(Model(number=4))
+# Output: number=4
+```
+
+<Tip>
+**When to use After Validators:** Use after validators when you need to validate data that's already been type-checked. They're the safest and most type-aware option.
+</Tip>
+
+## Before Validators
+
+Transform or pre-process raw input before type validation:
+
+```python
+from typing import Annotated, Any
+from pydantic import BaseModel, BeforeValidator, ValidationError
+
+def ensure_list(value: Any) -> Any:
+    """Convert single values to a list."""
+    if not isinstance(value, list):
+        return [value]
+    return value
+
+class Model(BaseModel):
+    numbers: Annotated[list[int], BeforeValidator(ensure_list)]
+
+print(Model(numbers=2))
+# Output: numbers=[2]
+
+print(Model(numbers=[1, 2, 3]))
+# Output: numbers=[1, 2, 3]
+
+try:
+    Model(numbers='invalid')
+except ValidationError as e:
+    print(e)
+    # 1 validation error for Model
+    # numbers.0
+    #   Input should be a valid integer
+```
+
+### Real-World Example: Date Parsing
+
+```python
+from typing import Annotated
+from datetime import datetime
+from pydantic import BaseModel, BeforeValidator
+
+# Use built-in functions as validators
+DateTimeFromIso = Annotated[datetime, BeforeValidator(datetime.fromisoformat)]
+
+class Event(BaseModel):
+    name: str
+    timestamp: DateTimeFromIso
+
+event = Event(name='Conference', timestamp='2024-01-15T09:00:00')
+print(event)
+# Output: name='Conference' timestamp=datetime.datetime(2024, 1, 15, 9, 0)
+```
+
+## Plain Validators
+
+Completely replace Pydantic's validation:
+
+```python
+from typing import Annotated, Any
+from pydantic import BaseModel, PlainValidator
+
+def custom_int_validator(value: Any) -> Any:
+    """Custom validation that accepts 'zero' as 0."""
+    if value == 'zero':
+        return 0
+    if isinstance(value, int):
+        return value * 2
+    return value  # Pass through other types
+
+class Model(BaseModel):
+    number: Annotated[int, PlainValidator(custom_int_validator)]
+
+print(Model(number=4))
+# Output: number=8
+
+print(Model(number='zero'))
+# Output: number=0
+
+# Warning: No type checking!
+print(Model(number='invalid'))
+# Output: number='invalid'
+```
+
+<Warning>
+**Use with caution:** Plain validators bypass all of Pydantic's type checking. You're responsible for ensuring type safety.
+</Warning>
+
+## Wrap Validators
+
+Most flexible - control when and how Pydantic's validation runs:
+
+```python
+from typing import Any, Annotated
+from datetime import date
+from pydantic import BaseModel, ValidationError, ValidationInfo, ValidatorFunctionWrapHandler, WrapValidator
+
+def sixties_validator(
+    val: Any,
+    handler: ValidatorFunctionWrapHandler,
+    info: ValidationInfo
+) -> date:
+    # Special case before validation
+    if val == 'epoch':
+        return date.fromtimestamp(0)
+    
+    # Run Pydantic's validation
+    validated = handler(val)
+    
+    # Check result after validation
+    if not (date.fromisoformat('1960-01-01') <= validated < date.fromisoformat('1970-01-01')):
+        raise ValueError(f'{val} is not in the sixties!')
+    
+    return validated
+
+SixtiesDate = Annotated[date, WrapValidator(sixties_validator)]
+
+class Model(BaseModel):
+    birth_date: SixtiesDate
+
+print(Model(birth_date='epoch'))
+# Output: birth_date=datetime.date(1970, 1, 1)
+
+print(Model(birth_date='1965-06-15'))
+# Output: birth_date=datetime.date(1965, 6, 15)
+
+try:
+    Model(birth_date='1980-01-01')
+except ValidationError as e:
+    print(e)
+    # Value error, 1980-01-01 is not in the sixties!
+```
+
+## Validator for Multiple Fields
+
+Apply the same validator to multiple fields:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class UserModel(BaseModel):
+    username: str
+    email: str
+    nickname: str
+    
+    @field_validator('username', 'email', 'nickname')
+    @classmethod
+    def no_profanity(cls, v: str) -> str:
+        profanity_list = ['badword1', 'badword2']
+        if any(word in v.lower() for word in profanity_list):
+            raise ValueError('Profanity detected')
+        return v
+
+user = UserModel(
+    username='john',
+    email='john@example.com',
+    nickname='johnny'
+)
+print(user)
+```
+
+## Reusable Validators with Annotated
+
+Create reusable validator types:
+
+```python
+from typing import Annotated
+from pydantic import AfterValidator, BaseModel, Field
+
+# Define reusable validators
+def validate_positive(v: int) -> int:
+    if v <= 0:
+        raise ValueError('must be positive')
+    return v
+
+def validate_even(v: int) -> int:
+    if v % 2 != 0:
+        raise ValueError('must be even')
+    return v
+
+# Create reusable types
+PositiveInt = Annotated[int, AfterValidator(validate_positive)]
+EvenInt = Annotated[int, AfterValidator(validate_even)]
+PositiveEvenInt = Annotated[int, AfterValidator(validate_positive), AfterValidator(validate_even)]
+
+class Inventory(BaseModel):
+    total_items: PositiveInt
+    batch_size: EvenInt
+    paired_items: PositiveEvenInt
+
+inv = Inventory(total_items=100, batch_size=50, paired_items=24)
+print(inv)
+# Output: total_items=100 batch_size=50 paired_items=24
+```
+
+## Model Validators
+
+Validate entire models or multiple fields together:
+
+```python
+from pydantic import BaseModel, model_validator
+from typing import Self
+
+class DateRange(BaseModel):
+    start_date: str
+    end_date: str
+    
+    @model_validator(mode='after')
+    def check_dates(self) -> Self:
+        if self.start_date >= self.end_date:
+            raise ValueError('start_date must be before end_date')
+        return self
+
+range_data = DateRange(start_date='2024-01-01', end_date='2024-12-31')
+print(range_data)
+# Output: start_date='2024-01-01' end_date='2024-12-31'
+```
+
+### Before Model Validators
+
+```python
+from typing import Any
+from pydantic import BaseModel, model_validator
+
+class UserInput(BaseModel):
+    username: str
+    password: str
+    
+    @model_validator(mode='before')
+    @classmethod
+    def check_data(cls, data: Any) -> Any:
+        # Normalize input before validation
+        if isinstance(data, dict):
+            # Convert username to lowercase
+            if 'username' in data:
+                data['username'] = data['username'].lower()
+        return data
+
+user = UserInput(username='JohnDoe', password='secret')
+print(user)
+# Output: username='johndoe' password='secret'
+```
+
+## Advanced Validator Patterns
+
+### Accessing Validation Context
+
+```python
+from pydantic import BaseModel, ValidationInfo, field_validator
+
+class Model(BaseModel):
+    name: str
+    threshold: int
+    
+    @field_validator('threshold')
+    @classmethod
+    def check_threshold(cls, v: int, info: ValidationInfo) -> int:
+        # Access field name
+        print(f"Validating field: {info.field_name}")
+        
+        # Access config
+        if info.config:
+            print(f"Model title: {info.config.get('title')}")
+        
+        # Access other field values (in model validators)
+        # info.data contains validated values so far
+        
+        return v
+
+m = Model(name='test', threshold=10)
+```
+
+### Conditional Validation
+
+```python
+from typing import Optional
+from pydantic import BaseModel, field_validator
+
+class ConditionalModel(BaseModel):
+    require_validation: bool = False
+    value: Optional[int] = None
+    
+    @field_validator('value')
+    @classmethod
+    def validate_value(cls, v: Optional[int], info: ValidationInfo) -> Optional[int]:
+        data = info.data
+        if data.get('require_validation') and v is None:
+            raise ValueError('value is required when require_validation is True')
+        return v
+
+# This works
+m1 = ConditionalModel(require_validation=False, value=None)
+
+# This also works
+m2 = ConditionalModel(require_validation=True, value=42)
+```
+
+<Accordion title="Example: Complex Cross-Field Validation">
+
+```python
+from pydantic import BaseModel, model_validator
+from typing import Self
+
+class Account(BaseModel):
+    balance: float
+    overdraft_limit: float = 0.0
+    withdrawal_amount: float = 0.0
+    
+    @model_validator(mode='after')
+    def check_sufficient_funds(self) -> Self:
+        available = self.balance + self.overdraft_limit
+        if self.withdrawal_amount > available:
+            raise ValueError(
+                f'Insufficient funds: withdrawal {self.withdrawal_amount} '
+                f'exceeds available {available}'
+            )
+        return self
+
+account = Account(
+    balance=100.0,
+    overdraft_limit=50.0,
+    withdrawal_amount=140.0
+)
+print(account)
+# Output: balance=100.0 overdraft_limit=50.0 withdrawal_amount=140.0
+```
+
+</Accordion>
+
+## Best Practices
+
+1. **Prefer After Validators** - They're type-safe and easier to write correctly
+
+2. **Use Annotated for reusability** - Create custom types that can be reused across models
+
+3. **Return the validated value** - Always return the value (modified or not) from validators
+
+4. **Use model validators for cross-field logic** - When validation depends on multiple fields
+
+5. **Avoid mutating in Before Validators** - If you raise an error, mutations may affect union validation
+
+6. **Leverage built-in functions** - Many standard library functions work as validators
+
+## Common Patterns
+
+<CodeGroup>
+
+```python Pattern - String Normalization
+from typing import Annotated
+from pydantic import AfterValidator, BaseModel
+
+def normalize_string(v: str) -> str:
+    return v.strip().lower()
+
+NormalizedStr = Annotated[str, AfterValidator(normalize_string)]
+
+class User(BaseModel):
+    username: NormalizedStr
+    
+user = User(username='  JohnDoe  ')
+print(user.username)
+# Output: johndoe
+```
+
+```python Pattern - Range Validation
+from typing import Annotated
+from pydantic import AfterValidator
+
+def in_range(min_val: int, max_val: int):
+    def validator(v: int) -> int:
+        if not min_val <= v <= max_val:
+            raise ValueError(f'must be between {min_val} and {max_val}')
+        return v
+    return validator
+
+Percentage = Annotated[int, AfterValidator(in_range(0, 100))]
+```
+
+```python Pattern - List Validation
+from typing import Annotated
+from pydantic import AfterValidator, BaseModel
+
+def non_empty_list(v: list) -> list:
+    if not v:
+        raise ValueError('list cannot be empty')
+    return v
+
+def unique_items(v: list) -> list:
+    if len(v) != len(set(v)):
+        raise ValueError('items must be unique')
+    return v
+
+UniqueNonEmptyList = Annotated[
+    list,
+    AfterValidator(non_empty_list),
+    AfterValidator(unique_items)
+]
+
+class Tags(BaseModel):
+    items: UniqueNonEmptyList[str]
+```
+
+</CodeGroup>
+
+## See Also
+
+- [Validators Concepts](/concepts/validators)
+- [Functional Validators API](/api/functional-validators)
+- [Fields and Validation](/concepts/fields)

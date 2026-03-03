@@ -1,0 +1,521 @@
+---
+title: Pydantic Logfire
+description: Observability and monitoring for Pydantic models with Logfire
+---
+
+Pydantic integrates seamlessly with **[Pydantic Logfire](https://logfire.pydantic.dev/)**, an observability platform built by the Pydantic team. Logfire provides powerful insights into your Pydantic model validations and application behavior.
+
+## What is Pydantic Logfire?
+
+Logfire is an observability platform designed with the same philosophy as Pydantic: powerful tools that are easy to use. It offers:
+
+- **Automatic Pydantic instrumentation** - Monitor validations without code changes
+- **Validation analytics** - Understand validation patterns and failures
+- **Performance insights** - Track validation performance and bottlenecks
+- **Multi-framework support** - Works with FastAPI, OpenAI, and more
+- **Built-in dashboards** - Pre-configured views for common use cases
+
+## Getting Started
+
+<Steps>
+
+### Install Logfire
+
+```bash
+pip install logfire
+```
+
+### Set Up Your Account
+
+Create a Logfire account and get your API credentials:
+
+```bash
+logfire auth
+```
+
+This opens your browser to complete authentication.
+
+### Configure in Your Application
+
+Add Logfire to your application:
+
+```python
+import logfire
+
+logfire.configure()  # Initialize Logfire
+```
+
+</Steps>
+
+## Basic Usage
+
+### Logging Pydantic Models
+
+Logfire has built-in support for Pydantic models:
+
+```python
+from datetime import date
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+
+class User(BaseModel):
+    name: str
+    country_code: str
+    dob: date
+
+user = User(name='Anne', country_code='USA', dob='2000-01-01')
+logfire.info('User processed: {user!r}', user=user)
+```
+
+This logs the user object with full type information and structure, making it easy to inspect in the Logfire dashboard.
+
+![Basic Pydantic Logfire Usage](../img/basic_logfire.png)
+
+<Note>
+Logfire automatically serializes Pydantic models in a structured format, preserving field types and nested structures.
+</Note>
+
+## Automatic Validation Instrumentation
+
+The most powerful feature is automatic validation tracking:
+
+```python
+from datetime import date
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+logfire.instrument_pydantic()  # Enable automatic instrumentation
+
+class User(BaseModel):
+    name: str
+    country_code: str
+    dob: date
+
+# Every validation is automatically logged
+User(name='Anne', country_code='USA', dob='2000-01-01')  # ✓ Success
+User(name='David', country_code='GBR', dob='invalid-dob')  # ✗ Validation error
+```
+
+With `instrument_pydantic()`, Logfire automatically:
+
+- Records every validation attempt
+- Captures successful validations with timing
+- Logs validation errors with full context
+- Tracks validation performance metrics
+
+![Logfire Instrumentation](../img/logfire_instrument.png)
+
+### Span Details
+
+Click on any validation span to see detailed information:
+
+- **Input data** - The exact data that was validated
+- **Validation errors** - Detailed error messages and locations
+- **Timing information** - How long validation took
+- **Stack traces** - Where validation was called from
+
+![Logfire Span Details](../img/logfire_span.png)
+
+## Configuration Options
+
+### Instrument Specific Models
+
+Instrument only specific models:
+
+```python
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+
+class User(BaseModel):
+    name: str
+    email: str
+
+class InternalConfig(BaseModel):
+    api_key: str  # Don't want to log this!
+    
+# Only instrument User model
+logfire.instrument_pydantic(models=[User])
+
+User(name='Anne', email='anne@example.com')  # Logged
+InternalConfig(api_key='secret')  # Not logged
+```
+
+### Control Validation Details
+
+Configure what information is captured:
+
+```python
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+
+# Instrument with custom settings
+logfire.instrument_pydantic(
+    record_validation_errors=True,  # Log validation failures
+    record_successful_validations=True,  # Log successful validations
+    record_field_values=True,  # Include field values in logs (be careful with sensitive data!)
+)
+
+class User(BaseModel):
+    username: str
+    password: str
+
+# All validations logged with full details
+user = User(username='john', password='secret123')
+```
+
+<Warning>
+Be cautious when logging field values if your models contain sensitive data like passwords, API keys, or personal information.
+</Warning>
+
+## Integration with FastAPI
+
+Logfire works seamlessly with FastAPI:
+
+```python
+from fastapi import FastAPI
+import logfire
+from pydantic import BaseModel, EmailStr
+
+app = FastAPI()
+
+# Configure Logfire
+logfire.configure()
+logfire.instrument_pydantic()
+logfire.instrument_fastapi(app)  # Also instrument FastAPI
+
+class User(BaseModel):
+    username: str
+    email: EmailStr
+
+@app.post("/users/")
+async def create_user(user: User):
+    logfire.info("Creating user", user=user)
+    return {"id": 1, "username": user.username}
+
+# Logfire now tracks:
+# - HTTP requests to /users/
+# - Pydantic validation of User model
+# - Response times and errors
+```
+
+This gives you complete observability:
+
+1. **HTTP request** - Method, path, headers, query params
+2. **Pydantic validation** - Input data and validation results
+3. **Business logic** - Your custom log messages
+4. **HTTP response** - Status code, response time, errors
+
+## Monitoring Validation Patterns
+
+### Identify Common Failures
+
+Use Logfire to find patterns in validation errors:
+
+```python
+import logfire
+from pydantic import BaseModel, Field
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+class Product(BaseModel):
+    name: str = Field(min_length=3, max_length=100)
+    price: float = Field(gt=0, le=10000)
+    sku: str = Field(pattern=r'^[A-Z]{2}\d{4}$')
+
+# These validations are automatically logged
+try:
+    Product(name='AB', price=5.99, sku='PR1234')  # name too short
+except Exception:
+    pass
+
+try:
+    Product(name='Widget', price=0, sku='PR1234')  # price must be > 0
+except Exception:
+    pass
+
+try:
+    Product(name='Widget', price=5.99, sku='INVALID')  # sku pattern mismatch
+except Exception:
+    pass
+
+# Logfire dashboard shows:
+# - Which fields fail validation most often
+# - Common patterns in invalid data
+# - Trends over time
+```
+
+### Performance Tracking
+
+Monitor validation performance:
+
+```python
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+class ComplexModel(BaseModel):
+    """Model with expensive validation."""
+    field1: str
+    field2: int
+    field3: list[dict[str, str]]
+    # ... many more fields
+
+# Logfire tracks validation time
+for i in range(1000):
+    model = ComplexModel(
+        field1="test",
+        field2=i,
+        field3=[{"key": "value"}]
+    )
+
+# Dashboard shows:
+# - Average validation time
+# - P95/P99 latencies
+# - Slowest validations
+```
+
+## Custom Instrumentation
+
+### Add Context to Validations
+
+```python
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+class Order(BaseModel):
+    order_id: str
+    user_id: int
+    total: float
+
+def process_order(order_data: dict, request_id: str):
+    # Add context to all logs in this scope
+    with logfire.span("process_order", request_id=request_id):
+        order = Order(**order_data)  # Validation happens in this span
+        logfire.info("Order validated", order_id=order.order_id)
+        return order
+
+# Logfire shows validation nested under process_order span
+process_order(
+    {"order_id": "ORD-123", "user_id": 42, "total": 99.99},
+    request_id="req-abc-123"
+)
+```
+
+### Track Business Metrics
+
+```python
+import logfire
+from pydantic import BaseModel, ValidationError
+
+logfire.configure()
+
+class PaymentRequest(BaseModel):
+    amount: float
+    currency: str
+    customer_id: str
+
+def process_payment(payment_data: dict):
+    try:
+        payment = PaymentRequest(**payment_data)
+        logfire.info(
+            "Payment validated",
+            amount=payment.amount,
+            currency=payment.currency,
+            customer_id=payment.customer_id
+        )
+        # Process payment...
+        logfire.info("Payment processed successfully")
+    except ValidationError as e:
+        # Log validation failure as a business metric
+        logfire.error(
+            "Payment validation failed",
+            errors=e.errors(),
+            input_data=payment_data
+        )
+        raise
+
+# Track metrics like:
+# - Payment validation success rate
+# - Common validation errors
+# - Average payment amounts
+```
+
+## Debugging with Logfire
+
+### Understand Validation Failures
+
+When users report issues, use Logfire to investigate:
+
+```python
+import logfire
+from pydantic import BaseModel, field_validator
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+class UserProfile(BaseModel):
+    username: str
+    age: int
+    
+    @field_validator('age')
+    @classmethod
+    def age_must_be_reasonable(cls, v: int) -> int:
+        if v < 0 or v > 150:
+            raise ValueError(f'Age {v} is not reasonable')
+        return v
+
+# Failed validation is automatically logged with full context
+try:
+    UserProfile(username='john', age=200)
+except Exception:
+    pass
+
+# In Logfire dashboard, you can:
+# - See the exact input that caused the failure
+# - View the full error message and location
+# - Trace the call stack
+# - Filter by user, time, error type, etc.
+```
+
+### Trace Data Flow
+
+```python
+import logfire
+from pydantic import BaseModel
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+class Input(BaseModel):
+    raw_data: str
+
+class Processed(BaseModel):
+    clean_data: str
+    length: int
+
+class Output(BaseModel):
+    result: str
+
+def pipeline(raw_input: dict):
+    with logfire.span("data_pipeline"):
+        # Each validation is logged as a sub-span
+        input_data = Input(**raw_input)
+        processed = Processed(
+            clean_data=input_data.raw_data.strip(),
+            length=len(input_data.raw_data)
+        )
+        output = Output(result=f"Processed: {processed.clean_data}")
+        return output
+
+# Logfire shows the complete data flow:
+# data_pipeline
+#   ├─ validate Input
+#   ├─ validate Processed
+#   └─ validate Output
+```
+
+## Best Practices
+
+<Steps>
+
+### Initialize Early
+
+Configure Logfire at application startup:
+
+```python
+# main.py or __init__.py
+import logfire
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+# Now all subsequent imports will be instrumented
+from .models import User, Product, Order
+```
+
+### Use Structured Logging
+
+Pass structured data rather than formatting strings:
+
+```python
+import logfire
+
+# Good: Structured
+logfire.info("User created", user_id=user.id, username=user.username)
+
+# Bad: String formatting
+logfire.info(f"User created: {user.id} - {user.username}")
+```
+
+### Filter Sensitive Data
+
+Exclude sensitive fields from logs:
+
+```python
+from pydantic import BaseModel, Field
+import logfire
+
+class User(BaseModel):
+    username: str
+    password: str = Field(exclude=True)  # Never serialize
+    api_key: str = Field(exclude=True)
+
+logfire.configure()
+logfire.instrument_pydantic()
+
+user = User(username='john', password='secret', api_key='key123')
+logfire.info('User created', user=user.model_dump())  # password & api_key excluded
+```
+
+### Monitor Production Carefully
+
+In production, be selective about what you log:
+
+```python
+import logfire
+import os
+
+logfire.configure()
+
+# Only log validation errors in production
+if os.getenv('ENVIRONMENT') == 'production':
+    logfire.instrument_pydantic(
+        record_successful_validations=False,  # Too noisy
+        record_validation_errors=True  # Important for debugging
+    )
+else:
+    # Log everything in development
+    logfire.instrument_pydantic(
+        record_successful_validations=True,
+        record_validation_errors=True
+    )
+```
+
+</Steps>
+
+## Learn More
+
+For complete documentation and tutorials:
+
+- [Logfire Documentation](https://logfire.pydantic.dev/docs/)
+- [Pydantic Integration Guide](https://logfire.pydantic.dev/docs/why-logfire/pydantic/)
+- [Getting Started Tutorial](https://logfire.pydantic.dev/docs/)
+
+## Related Resources
+
+- [Pydantic Models](../concepts/models.md)
+- [Validation](../concepts/validators.md)
+- [FastAPI Integration](./fastapi.mdx)

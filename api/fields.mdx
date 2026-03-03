@@ -1,0 +1,570 @@
+---
+title: Field Functions
+description: API reference for Field(), PrivateAttr(), and computed_field()
+---
+
+Functions for defining fields on Pydantic models and dataclasses.
+
+## Field
+
+```python
+def Field(
+    default: Any = PydanticUndefined,
+    *,
+    default_factory: Callable[[], Any] | Callable[[dict[str, Any]], Any] | None = None,
+    alias: str | None = None,
+    alias_priority: int | None = None,
+    validation_alias: str | AliasPath | AliasChoices | None = None,
+    serialization_alias: str | None = None,
+    title: str | None = None,
+    field_title_generator: Callable[[str, FieldInfo], str] | None = None,
+    description: str | None = None,
+    examples: list[Any] | None = None,
+    exclude: bool | None = None,
+    exclude_if: Callable[[Any], bool] | None = None,
+    discriminator: str | types.Discriminator | None = None,
+    deprecated: Deprecated | str | bool | None = None,
+    json_schema_extra: JsonDict | Callable[[JsonDict], None] | None = None,
+    frozen: bool | None = None,
+    validate_default: bool | None = None,
+    repr: bool = True,
+    init: bool | None = None,
+    init_var: bool | None = None,
+    kw_only: bool | None = None,
+    pattern: str | re.Pattern[str] | None = None,
+    strict: bool | None = None,
+    coerce_numbers_to_str: bool | None = None,
+    gt: annotated_types.SupportsGt | None = None,
+    ge: annotated_types.SupportsGe | None = None,
+    lt: annotated_types.SupportsLt | None = None,
+    le: annotated_types.SupportsLe | None = None,
+    multiple_of: float | None = None,
+    allow_inf_nan: bool | None = None,
+    max_digits: int | None = None,
+    decimal_places: int | None = None,
+    min_length: int | None = None,
+    max_length: int | None = None,
+    union_mode: Literal['smart', 'left_to_right'] = 'smart',
+    fail_fast: bool | None = None,
+) -> Any
+```
+
+Create a field for objects that can be configured.
+
+Used to provide extra information about a field, either for the model schema or complex validation.
+
+### Parameters
+
+<ParamField path="default" type="Any" default="PydanticUndefined">
+Default value if the field is not set.
+</ParamField>
+
+<ParamField path="default_factory" type="Callable[[], Any] | Callable[[dict[str, Any]], Any] | None">
+A callable to generate the default value. The callable can either take 0 arguments or a single argument containing the already validated data.
+</ParamField>
+
+<ParamField path="alias" type="str | None">
+The name to use for the attribute when validating or serializing by alias.
+</ParamField>
+
+<ParamField path="alias_priority" type="int | None">
+Priority of the alias. This affects whether an alias generator is used.
+</ParamField>
+
+<ParamField path="validation_alias" type="str | AliasPath | AliasChoices | None">
+Like `alias`, but only affects validation, not serialization.
+</ParamField>
+
+<ParamField path="serialization_alias" type="str | None">
+Like `alias`, but only affects serialization, not validation.
+</ParamField>
+
+<ParamField path="title" type="str | None">
+Human-readable title.
+</ParamField>
+
+<ParamField path="field_title_generator" type="Callable[[str, FieldInfo], str] | None">
+A callable that takes a field name and returns title for it.
+</ParamField>
+
+<ParamField path="description" type="str | None">
+Human-readable description.
+</ParamField>
+
+<ParamField path="examples" type="list[Any] | None">
+Example values for this field.
+</ParamField>
+
+<ParamField path="exclude" type="bool | None">
+Whether to exclude the field from the model serialization.
+</ParamField>
+
+<ParamField path="exclude_if" type="Callable[[Any], bool] | None">
+A callable that determines whether to exclude a field during serialization based on its value.
+</ParamField>
+
+<ParamField path="discriminator" type="str | types.Discriminator | None">
+Field name or Discriminator for discriminating the type in a tagged union.
+</ParamField>
+
+<ParamField path="deprecated" type="Deprecated | str | bool | None">
+A deprecation message, an instance of `warnings.deprecated`, or a boolean.
+</ParamField>
+
+<ParamField path="json_schema_extra" type="JsonDict | Callable[[JsonDict], None] | None">
+A dict or callable to provide extra JSON schema properties.
+</ParamField>
+
+<ParamField path="frozen" type="bool | None">
+Whether the field is frozen. If true, attempts to change the value will raise an error.
+</ParamField>
+
+<ParamField path="validate_default" type="bool | None">
+If True, apply validation to the default value every time you create an instance.
+</ParamField>
+
+<ParamField path="repr" type="bool" default="True">
+A boolean indicating whether to include the field in the `__repr__` output.
+</ParamField>
+
+<ParamField path="init" type="bool | None">
+Whether the field should be included in the constructor of the dataclass. (Only applies to dataclasses.)
+</ParamField>
+
+<ParamField path="init_var" type="bool | None">
+Whether the field should only be included in the constructor of the dataclass. (Only applies to dataclasses.)
+</ParamField>
+
+<ParamField path="kw_only" type="bool | None">
+Whether the field should be a keyword-only argument in the constructor. (Only applies to dataclasses.)
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+If True, strict validation is applied to the field.
+</ParamField>
+
+<ParamField path="gt" type="annotated_types.SupportsGt | None">
+Greater than. Value must be greater than this. Only applicable to numbers.
+</ParamField>
+
+<ParamField path="ge" type="annotated_types.SupportsGe | None">
+Greater than or equal. Value must be greater than or equal to this. Only applicable to numbers.
+</ParamField>
+
+<ParamField path="lt" type="annotated_types.SupportsLt | None">
+Less than. Value must be less than this. Only applicable to numbers.
+</ParamField>
+
+<ParamField path="le" type="annotated_types.SupportsLe | None">
+Less than or equal. Value must be less than or equal to this. Only applicable to numbers.
+</ParamField>
+
+<ParamField path="multiple_of" type="float | None">
+Value must be a multiple of this. Only applicable to numbers.
+</ParamField>
+
+<ParamField path="min_length" type="int | None">
+Minimum length for iterables.
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+Maximum length for iterables.
+</ParamField>
+
+<ParamField path="pattern" type="str | re.Pattern[str] | None">
+Pattern for strings (a regular expression).
+</ParamField>
+
+<ParamField path="allow_inf_nan" type="bool | None">
+Allow `inf`, `-inf`, `nan`. Only applicable to float and Decimal numbers.
+</ParamField>
+
+<ParamField path="max_digits" type="int | None">
+Maximum number of allowed digits for strings.
+</ParamField>
+
+<ParamField path="decimal_places" type="int | None">
+Maximum number of decimal places allowed for numbers.
+</ParamField>
+
+<ParamField path="coerce_numbers_to_str" type="bool | None">
+Whether to enable coercion of any Number type to str (not applicable in strict mode).
+</ParamField>
+
+<ParamField path="union_mode" type="Literal['smart', 'left_to_right']" default="'smart'">
+The strategy to apply when validating a union.
+</ParamField>
+
+<ParamField path="fail_fast" type="bool | None">
+If True, validation will stop on the first error. Only applicable to iterable types.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="FieldInfo">
+A new `FieldInfo` instance. The return annotation is `Any` so Field can be used on type-annotated fields without causing type errors.
+</ResponseField>
+
+### Examples
+
+#### Basic Usage
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    name: str = Field(description='The user\'s name')
+    age: int = Field(gt=0, le=120, description='The user\'s age')
+
+user = User(name='John', age=30)
+print(user)
+#> name='John' age=30
+```
+
+#### Default Values
+
+```python
+from pydantic import BaseModel, Field
+
+class Product(BaseModel):
+    name: str
+    price: float = Field(default=0.0, ge=0)
+    quantity: int = Field(default=1, ge=1)
+
+product = Product(name='Widget')
+print(product)
+#> name='Widget' price=0.0 quantity=1
+```
+
+#### Default Factory
+
+```python
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+class Event(BaseModel):
+    name: str
+    created_at: datetime = Field(default_factory=datetime.now)
+
+event = Event(name='Meeting')
+print(event.created_at)
+#> 2024-01-15 10:30:00.123456
+```
+
+#### Validation Constraints
+
+```python
+from pydantic import BaseModel, Field
+
+class Account(BaseModel):
+    username: str = Field(min_length=3, max_length=20, pattern=r'^[a-zA-Z0-9_]+$')
+    balance: float = Field(ge=0, description='Account balance in USD')
+    email: str = Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+
+account = Account(
+    username='john_doe',
+    balance=100.50,
+    email='john@example.com'
+)
+print(account)
+#> username='john_doe' balance=100.5 email='john@example.com'
+```
+
+#### Aliases
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    name: str = Field(alias='userName')
+    age: int = Field(serialization_alias='userAge')
+
+user = User(userName='John', age=30)
+print(user.model_dump(by_alias=True))
+#> {'userName': 'John', 'userAge': 30}
+```
+
+## PrivateAttr
+
+```python
+def PrivateAttr(
+    default: Any = PydanticUndefined,
+    *,
+    default_factory: Callable[[], Any] | None = None,
+    init: Literal[False] = False,
+) -> Any
+```
+
+Indicates that an attribute is intended for private use and not handled during normal validation/serialization.
+
+Private attributes are not validated by Pydantic, so it's up to you to ensure they are used in a type-safe manner.
+
+### Parameters
+
+<ParamField path="default" type="Any" default="PydanticUndefined">
+The attribute's default value.
+</ParamField>
+
+<ParamField path="default_factory" type="Callable[[], Any] | None">
+Callable that will be called when a default value is needed for this attribute.
+</ParamField>
+
+<ParamField path="init" type="Literal[False]" default="False">
+Whether the attribute should be included in the constructor. Always `False` for private attributes.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="ModelPrivateAttr">
+An instance of `ModelPrivateAttr` class.
+</ResponseField>
+
+### Raises
+
+<ResponseField name="raises" type="TypeError">
+If both `default` and `default_factory` are set.
+</ResponseField>
+
+### Examples
+
+#### Basic Private Attribute
+
+```python
+from pydantic import BaseModel, PrivateAttr
+
+class User(BaseModel):
+    name: str
+    _session_id: str = PrivateAttr()
+
+user = User(name='John')
+user._session_id = 'abc123'
+print(user._session_id)
+#> abc123
+print(user.model_dump())
+#> {'name': 'John'}
+```
+
+#### Private Attribute with Default
+
+```python
+from pydantic import BaseModel, PrivateAttr
+
+class Counter(BaseModel):
+    name: str
+    _count: int = PrivateAttr(default=0)
+    
+    def increment(self):
+        self._count += 1
+        return self._count
+
+counter = Counter(name='MyCounter')
+print(counter._count)
+#> 0
+print(counter.increment())
+#> 1
+print(counter.model_dump())
+#> {'name': 'MyCounter'}
+```
+
+#### Private Attribute with Factory
+
+```python
+from pydantic import BaseModel, PrivateAttr
+import uuid
+
+class User(BaseModel):
+    name: str
+    _id: str = PrivateAttr(default_factory=lambda: uuid.uuid4().hex)
+
+user1 = User(name='John')
+user2 = User(name='Jane')
+print(user1._id != user2._id)
+#> True
+```
+
+## computed_field
+
+```python
+def computed_field(
+    func: PropertyT | None = None,
+    /,
+    *,
+    alias: str | None = None,
+    alias_priority: int | None = None,
+    title: str | None = None,
+    field_title_generator: Callable[[str, ComputedFieldInfo], str] | None = None,
+    description: str | None = None,
+    deprecated: Deprecated | str | bool | None = None,
+    examples: list[Any] | None = None,
+    json_schema_extra: JsonDict | Callable[[JsonDict], None] | None = None,
+    repr: bool | None = None,
+    return_type: Any = PydanticUndefined,
+) -> PropertyT | Callable[[PropertyT], PropertyT]
+```
+
+Decorator to include `property` and `cached_property` when serializing models or dataclasses.
+
+This is useful for fields that are computed from other fields, or for fields that are expensive to compute and should be cached.
+
+### Parameters
+
+<ParamField path="func" type="PropertyT | None">
+The function to wrap.
+</ParamField>
+
+<ParamField path="alias" type="str | None">
+Alias to use when serializing this computed field, only used when `by_alias=True`.
+</ParamField>
+
+<ParamField path="alias_priority" type="int | None">
+Priority of the alias. This affects whether an alias generator is used.
+</ParamField>
+
+<ParamField path="title" type="str | None">
+Title to use when including this computed field in JSON Schema.
+</ParamField>
+
+<ParamField path="field_title_generator" type="Callable[[str, ComputedFieldInfo], str] | None">
+A callable that takes a field name and returns title for it.
+</ParamField>
+
+<ParamField path="description" type="str | None">
+Description to use when including this computed field in JSON Schema, defaults to the function's docstring.
+</ParamField>
+
+<ParamField path="deprecated" type="Deprecated | str | bool | None">
+A deprecation message to be emitted when accessing the field.
+</ParamField>
+
+<ParamField path="examples" type="list[Any] | None">
+Example values to use when including this computed field in JSON Schema.
+</ParamField>
+
+<ParamField path="json_schema_extra" type="JsonDict | Callable[[JsonDict], None] | None">
+A dict or callable to provide extra JSON schema properties.
+</ParamField>
+
+<ParamField path="repr" type="bool | None">
+Whether to include this computed field in model repr. Default is `False` for private properties and `True` for public properties.
+</ParamField>
+
+<ParamField path="return_type" type="Any" default="PydanticUndefined">
+Optional return type for serialization logic to expect when serializing to JSON.
+</ParamField>
+
+### Returns
+
+<ResponseField name="return" type="PropertyT | Callable[[PropertyT], PropertyT]">
+A proxy wrapper for the property.
+</ResponseField>
+
+### Examples
+
+#### Basic Computed Field
+
+```python
+from pydantic import BaseModel, computed_field
+
+class Rectangle(BaseModel):
+    width: int
+    length: int
+
+    @computed_field
+    @property
+    def area(self) -> int:
+        return self.width * self.length
+
+rect = Rectangle(width=3, length=2)
+print(rect.area)
+#> 6
+print(rect.model_dump())
+#> {'width': 3, 'length': 2, 'area': 6}
+```
+
+#### Computed Field with Setter
+
+```python
+from pydantic import BaseModel, computed_field
+
+class Square(BaseModel):
+    width: float
+
+    @computed_field
+    @property
+    def area(self) -> float:
+        return round(self.width ** 2, 2)
+
+    @area.setter
+    def area(self, new_area: float) -> None:
+        self.width = new_area ** 0.5
+
+square = Square(width=2.0)
+print(square.area)
+#> 4.0
+square.area = 9.0
+print(square.width)
+#> 3.0
+```
+
+#### Cached Computed Field
+
+```python
+from functools import cached_property
+from pydantic import BaseModel, computed_field
+import time
+
+class ExpensiveComputation(BaseModel):
+    value: int
+
+    @computed_field
+    @cached_property
+    def expensive_result(self) -> int:
+        time.sleep(1)  # Simulate expensive computation
+        return self.value * 2
+
+model = ExpensiveComputation(value=5)
+print(model.expensive_result)  # Takes 1 second
+#> 10
+print(model.expensive_result)  # Instant (cached)
+#> 10
+```
+
+#### Computed Field with Alias
+
+```python
+from pydantic import BaseModel, computed_field
+
+class Person(BaseModel):
+    first_name: str
+    last_name: str
+
+    @computed_field(alias='fullName')
+    @property
+    def full_name(self) -> str:
+        return f'{self.first_name} {self.last_name}'
+
+person = Person(first_name='John', last_name='Doe')
+print(person.model_dump(by_alias=True))
+#> {'first_name': 'John', 'last_name': 'Doe', 'fullName': 'John Doe'}
+```
+
+#### Exclude from Repr
+
+```python
+from pydantic import BaseModel, computed_field
+import random
+
+class Model(BaseModel):
+    value: int
+
+    @computed_field(repr=False)
+    @property
+    def random_number(self) -> int:
+        return random.randint(0, 1000)
+
+model = Model(value=42)
+print(repr(model))
+#> Model(value=42)
+print(model.random_number)  # Still accessible
+#> 573
+```

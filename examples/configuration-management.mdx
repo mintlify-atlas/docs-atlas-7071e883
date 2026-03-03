@@ -1,0 +1,548 @@
+---
+title: Configuration Management
+description: Manage application settings and environment variables with Pydantic
+---
+
+# Configuration Management
+
+Pydantic excels at managing application configuration from environment variables, files, and other sources. Learn production-ready patterns for settings management.
+
+## Basic Settings Model
+
+Create type-safe configuration classes:
+
+```python
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class Settings(BaseModel):
+    # Application settings
+    app_name: str = "My Application"
+    debug: bool = False
+    version: str = "1.0.0"
+    
+    # Server settings
+    host: str = "localhost"
+    port: int = 8000
+    
+    # Database settings
+    database_url: str = Field(..., description="Database connection string")
+    database_pool_size: int = 5
+    
+    # API keys
+    api_key: Optional[str] = None
+    secret_key: str = Field(..., min_length=32)
+
+# Load configuration
+settings = Settings(
+    database_url="postgresql://user:pass@localhost/db",
+    secret_key="your-secret-key-at-least-32-chars-long"
+)
+
+print(settings.port)  # 8000
+print(settings.debug)  # False
+```
+
+## Environment Variables
+
+For loading from environment variables, use `pydantic-settings`:
+
+```bash
+pip install pydantic-settings
+```
+
+```python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+
+class AppSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False
+    )
+    
+    # Automatically loaded from environment
+    app_name: str = "MyApp"
+    debug: bool = False
+    database_url: str = Field(..., alias="DATABASE_URL")
+    redis_url: str = "redis://localhost:6379"
+    secret_key: str
+    
+    # API configuration
+    api_v1_prefix: str = "/api/v1"
+    cors_origins: list[str] = ["http://localhost:3000"]
+
+# Loads from environment variables or .env file
+settings = AppSettings()
+```
+
+<Note>
+`.env` file format:
+```bash
+APP_NAME=MyApplication
+DEBUG=true
+DATABASE_URL=postgresql://user:pass@localhost/db
+REDIS_URL=redis://localhost:6379
+SECRET_KEY=super-secret-key-at-least-32-characters-long
+CORS_ORIGINS=["http://localhost:3000","https://myapp.com"]
+```
+</Note>
+
+## Nested Configuration
+
+Organize settings into logical groups:
+
+```python
+from pydantic import BaseModel, Field, PostgresDsn, RedisDsn
+from pydantic_settings import BaseSettings
+
+class DatabaseSettings(BaseModel):
+    url: PostgresDsn
+    pool_size: int = 5
+    pool_max_overflow: int = 10
+    echo: bool = False
+
+class RedisSettings(BaseModel):
+    url: RedisDsn = "redis://localhost:6379/0"
+    max_connections: int = 50
+    socket_timeout: int = 5
+
+class SecuritySettings(BaseModel):
+    secret_key: str = Field(..., min_length=32)
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+
+class LoggingSettings(BaseModel):
+    level: str = "INFO"
+    format: str = "json"
+    output: str = "stdout"
+
+class Settings(BaseSettings):
+    app_name: str = "MyApp"
+    debug: bool = False
+    
+    database: DatabaseSettings
+    redis: RedisSettings
+    security: SecuritySettings
+    logging: LoggingSettings
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_nested_delimiter="__"  # Use __ for nested fields
+    )
+
+# Environment variables:
+# DATABASE__URL=postgresql://...
+# DATABASE__POOL_SIZE=10
+# REDIS__MAX_CONNECTIONS=100
+# SECURITY__SECRET_KEY=...
+
+settings = Settings()
+print(settings.database.pool_size)  # 10
+print(settings.redis.max_connections)  # 100
+```
+
+## Multiple Environment Support
+
+<CodeGroup>
+
+```python Development
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from enum import Enum
+
+class Environment(str, Enum):
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+class Settings(BaseSettings):
+    environment: Environment = Environment.DEVELOPMENT
+    debug: bool = True
+    
+    # Different database per environment
+    database_url: str
+    
+    # Security relaxed in dev
+    allow_origins: list[str] = ["*"]
+    
+    @property
+    def is_production(self) -> bool:
+        return self.environment == Environment.PRODUCTION
+    
+    @property
+    def is_development(self) -> bool:
+        return self.environment == Environment.DEVELOPMENT
+    
+    model_config = SettingsConfigDict(
+        env_file=".env.development",
+        env_file_encoding="utf-8"
+    )
+
+settings = Settings()
+```
+
+```python Production
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
+
+class ProductionSettings(BaseSettings):
+    environment: Environment = Environment.PRODUCTION
+    debug: bool = False  # Must be False in production
+    
+    database_url: str
+    
+    # Strict CORS in production
+    allow_origins: list[str] = []
+    
+    @field_validator('debug')
+    @classmethod
+    def debug_must_be_false(cls, v: bool, values) -> bool:
+        env = values.data.get('environment')
+        if env == Environment.PRODUCTION and v is True:
+            raise ValueError('Debug must be False in production')
+        return v
+    
+    @field_validator('allow_origins')
+    @classmethod
+    def origins_must_be_specific(cls, v: list[str]) -> list[str]:
+        if '*' in v:
+            raise ValueError('Wildcard CORS not allowed in production')
+        return v
+    
+    model_config = SettingsConfigDict(
+        env_file=".env.production",
+        env_file_encoding="utf-8"
+    )
+```
+
+</CodeGroup>
+
+## Secrets Management
+
+<Steps>
+
+### Step 1: Define Secret Types
+
+```python
+from pydantic import BaseModel, SecretStr, Field
+from pydantic_settings import BaseSettings
+
+class DatabaseConfig(BaseModel):
+    host: str
+    port: int = 5432
+    username: str
+    password: SecretStr  # Won't be logged or printed
+    database: str
+    
+    def get_url(self) -> str:
+        pwd = self.password.get_secret_value()
+        return f"postgresql://{self.username}:{pwd}@{self.host}:{self.port}/{self.database}"
+
+class APIKeys(BaseModel):
+    stripe_key: SecretStr
+    sendgrid_key: SecretStr
+    jwt_secret: SecretStr
+```
+
+### Step 2: Load from Secrets File
+
+```python
+class Settings(BaseSettings):
+    app_name: str
+    database: DatabaseConfig
+    api_keys: APIKeys
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        secrets_dir="/run/secrets"  # Docker secrets location
+    )
+
+# Reads from:
+# - /run/secrets/database__password
+# - /run/secrets/api_keys__stripe_key
+# etc.
+
+settings = Settings()
+print(settings.database.password)  # **********
+print(settings.database.get_url())  # Full URL with actual password
+```
+
+### Step 3: Environment-Specific Secrets
+
+```python
+import os
+from pathlib import Path
+
+class Settings(BaseSettings):
+    environment: str = "development"
+    secret_key: SecretStr
+    
+    model_config = SettingsConfigDict(
+        env_file=f".env.{os.getenv('ENV', 'development')}",
+        secrets_dir=Path(f"/run/secrets/{os.getenv('ENV', 'development')}")
+    )
+```
+
+</Steps>
+
+## Configuration Validation
+
+Validate configuration at startup:
+
+```python
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings
+from typing_extensions import Self
+import re
+
+class Settings(BaseSettings):
+    database_url: str
+    redis_url: str
+    allowed_hosts: list[str]
+    cors_origins: list[str]
+    max_upload_size: int  # In bytes
+    
+    @field_validator('database_url')
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if not v.startswith(('postgresql://', 'postgres://')):
+            raise ValueError('Database must be PostgreSQL')
+        return v
+    
+    @field_validator('allowed_hosts')
+    @classmethod
+    def validate_hosts(cls, v: list[str]) -> list[str]:
+        for host in v:
+            # Simple hostname/domain validation
+            if not re.match(r'^[a-zA-Z0-9.-]+$', host):
+                raise ValueError(f'Invalid host: {host}')
+        return v
+    
+    @field_validator('max_upload_size')
+    @classmethod
+    def validate_upload_size(cls, v: int) -> int:
+        max_allowed = 100 * 1024 * 1024  # 100 MB
+        if v > max_allowed:
+            raise ValueError(f'Upload size cannot exceed {max_allowed} bytes')
+        return v
+    
+    @model_validator(mode='after')
+    def validate_cors_and_hosts(self) -> Self:
+        # Ensure CORS origins are in allowed hosts
+        for origin in self.cors_origins:
+            host = origin.split('://')[-1].split(':')[0]
+            if host not in self.allowed_hosts and '*' not in self.allowed_hosts:
+                raise ValueError(f'CORS origin {origin} not in allowed hosts')
+        return self
+```
+
+## Dynamic Configuration
+
+Reload configuration at runtime:
+
+```python
+from pydantic_settings import BaseSettings
+from typing import Optional
+import threading
+
+class DynamicSettings(BaseSettings):
+    feature_flag_new_ui: bool = False
+    rate_limit_per_minute: int = 60
+    maintenance_mode: bool = False
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
+    
+    @classmethod
+    def reload(cls) -> 'DynamicSettings':
+        """Reload settings from environment/file"""
+        return cls()
+
+class SettingsManager:
+    """Thread-safe settings manager"""
+    def __init__(self):
+        self._settings = DynamicSettings()
+        self._lock = threading.Lock()
+    
+    def get(self) -> DynamicSettings:
+        with self._lock:
+            return self._settings
+    
+    def reload(self) -> DynamicSettings:
+        with self._lock:
+            self._settings = DynamicSettings.reload()
+            return self._settings
+
+# Global settings manager
+settings_manager = SettingsManager()
+
+# Use in application
+def check_feature_enabled():
+    settings = settings_manager.get()
+    return settings.feature_flag_new_ui
+
+# Reload when needed
+settings_manager.reload()
+```
+
+## FastAPI Integration
+
+```python
+from fastapi import FastAPI, Depends
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+class Settings(BaseSettings):
+    app_name: str = "Awesome API"
+    admin_email: str = "admin@example.com"
+    database_url: str
+    
+    model_config = SettingsConfigDict(env_file=".env")
+
+@lru_cache()
+def get_settings() -> Settings:
+    """Cached settings - loaded once per application lifecycle"""
+    return Settings()
+
+app = FastAPI()
+
+@app.get("/info")
+async def info(settings: Settings = Depends(get_settings)):
+    return {
+        "app_name": settings.app_name,
+        "admin_email": settings.admin_email
+    }
+
+@app.on_event("startup")
+async def startup_event():
+    settings = get_settings()
+    print(f"Starting {settings.app_name}")
+    # Initialize database, caching, etc.
+```
+
+<Tip>
+Use `@lru_cache()` to load settings once and reuse across requests. This is efficient and ensures consistent configuration during the application lifecycle.
+</Tip>
+
+## Computed Settings
+
+```python
+from pydantic import computed_field
+from pydantic_settings import BaseSettings
+from pathlib import Path
+
+class Settings(BaseSettings):
+    # Base paths
+    base_dir: Path = Path(__file__).parent.parent
+    
+    # Upload settings
+    upload_folder: str = "uploads"
+    max_upload_size: int = 10 * 1024 * 1024  # 10 MB
+    
+    # Database
+    database_url: str
+    
+    @computed_field
+    @property
+    def upload_path(self) -> Path:
+        """Computed upload directory path"""
+        return self.base_dir / self.upload_folder
+    
+    @computed_field
+    @property
+    def database_is_sqlite(self) -> bool:
+        """Check if using SQLite"""
+        return self.database_url.startswith('sqlite')
+    
+    @computed_field
+    @property
+    def max_upload_size_mb(self) -> float:
+        """Upload size in MB for display"""
+        return self.max_upload_size / (1024 * 1024)
+
+settings = Settings(database_url="sqlite:///./test.db")
+print(settings.upload_path)  # /path/to/project/uploads
+print(settings.database_is_sqlite)  # True
+print(settings.max_upload_size_mb)  # 10.0
+```
+
+## Testing with Settings
+
+```python
+import pytest
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    database_url: str
+    debug: bool = False
+    
+    model_config = SettingsConfigDict(env_file=".env")
+
+# Override settings in tests
+@pytest.fixture
+def test_settings():
+    return Settings(
+        database_url="sqlite:///:memory:",
+        debug=True
+    )
+
+def test_api_endpoint(test_settings):
+    # Use test settings
+    assert test_settings.database_url == "sqlite:///:memory:"
+    assert test_settings.debug is True
+
+# Environment variable override in tests
+def test_with_env_override(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    settings = Settings()
+    assert "postgresql" in settings.database_url
+```
+
+## Configuration Schema Export
+
+```python
+from pydantic_settings import BaseSettings
+import json
+
+class Settings(BaseSettings):
+    app_name: str = "MyApp"
+    debug: bool = False
+    database_url: str
+    api_key: str
+    
+    model_config = SettingsConfigDict(env_file=".env")
+
+# Export JSON Schema for documentation
+schema = Settings.model_json_schema()
+
+with open('config-schema.json', 'w') as f:
+    json.dump(schema, f, indent=2)
+
+print("Configuration schema:")
+for field_name, field_info in Settings.model_fields.items():
+    print(f"  {field_name}: {field_info.annotation}")
+    if field_info.default:
+        print(f"    Default: {field_info.default}")
+```
+
+## Summary
+
+Configuration management with Pydantic provides:
+
+- Type-safe settings with validation
+- Automatic loading from environment variables and `.env` files
+- Nested configuration for organized settings
+- Multiple environment support (dev, staging, production)
+- Secrets management with `SecretStr`
+- Configuration validation at startup
+- Dynamic configuration reloading
+- FastAPI integration with dependency injection
+- Computed fields for derived settings
+- Testing support with override capabilities
+- JSON Schema export for documentation
+
+This creates robust, validated configuration management that catches errors early and documents itself.

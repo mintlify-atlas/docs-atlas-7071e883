@@ -1,0 +1,435 @@
+---
+title: Fields
+description: Defining and configuring model fields with Field()
+---
+
+Fields are the building blocks of Pydantic models. The `Field` function provides fine-grained control over field validation, serialization, and metadata.
+
+## Field Function
+
+The `Field` function creates a `FieldInfo` object that configures field behavior:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int = Field(description='User ID')
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    age: int = Field(gt=0, le=120)
+
+user = User(id=1, name='John', email='john@example.com', age=30)
+print(user)
+#> id=1 name='John' email='john@example.com' age=30
+```
+
+## Field Parameters
+
+### Default Values
+
+<ParamField path="default" type="Any">
+  The default value for the field
+</ParamField>
+
+<ParamField path="default_factory" type="Callable">
+  A callable that returns the default value
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import List
+
+class User(BaseModel):
+    name: str
+    created_at: datetime = Field(default_factory=datetime.now)
+    tags: List[str] = Field(default_factory=list)
+
+user1 = User(name='John')
+user2 = User(name='Jane')
+
+print(user1.created_at != user2.created_at)  # Different times
+#> True
+
+user1.tags.append('admin')
+print(user1.tags)
+#> ['admin']
+print(user2.tags)  # Separate list
+#> []
+```
+
+### Validation Constraints
+
+#### Numeric Constraints
+
+<ParamField path="gt" type="float | None">
+  Value must be greater than this number
+</ParamField>
+
+<ParamField path="ge" type="float | None">
+  Value must be greater than or equal to this number
+</ParamField>
+
+<ParamField path="lt" type="float | None">
+  Value must be less than this number
+</ParamField>
+
+<ParamField path="le" type="float | None">
+  Value must be less than or equal to this number
+</ParamField>
+
+<ParamField path="multiple_of" type="float | None">
+  Value must be a multiple of this number
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+
+class Product(BaseModel):
+    price: float = Field(gt=0, le=10000)
+    quantity: int = Field(ge=0, multiple_of=5)
+
+product = Product(price=99.99, quantity=10)
+print(product)
+#> price=99.99 quantity=10
+
+try:
+    Product(price=-10, quantity=10)
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for Product
+    price
+      Input should be greater than 0
+    '''
+```
+
+#### String Constraints
+
+<ParamField path="min_length" type="int | None">
+  Minimum string length
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  Maximum string length
+</ParamField>
+
+<ParamField path="pattern" type="str | Pattern | None">
+  Regex pattern the string must match
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+
+class User(BaseModel):
+    username: str = Field(min_length=3, max_length=20)
+    email: str = Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    zipcode: str = Field(pattern=r'^\d{5}$')
+
+user = User(
+    username='john_doe',
+    email='john@example.com',
+    zipcode='12345'
+)
+print(user)
+
+try:
+    User(username='ab', email='invalid', zipcode='123')
+except ValidationError as e:
+    print(len(e.errors()))
+    #> 3
+```
+
+### Field Aliases
+
+<ParamField path="alias" type="str | None">
+  Alternative name for the field (used for both validation and serialization)
+</ParamField>
+
+<ParamField path="validation_alias" type="str | AliasPath | AliasChoices | None">
+  Alias used only during validation
+</ParamField>
+
+<ParamField path="serialization_alias" type="str | None">
+  Alias used only during serialization
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    user_id: int = Field(alias='id')
+    user_name: str = Field(validation_alias='name', serialization_alias='fullName')
+
+# Validate with aliases
+user = User(**{'id': 123, 'name': 'John Doe'})
+print(user.user_id)
+#> 123
+
+# Serialize with aliases
+print(user.model_dump(by_alias=True))
+#> {'id': 123, 'fullName': 'John Doe'}
+```
+
+### Field Metadata
+
+<ParamField path="title" type="str | None">
+  Human-readable title for the field
+</ParamField>
+
+<ParamField path="description" type="str | None">
+  Description of the field
+</ParamField>
+
+<ParamField path="examples" type="list[Any] | None">
+  Example values for the field
+</ParamField>
+
+<ParamField path="deprecated" type="bool | str | None">
+  Mark the field as deprecated
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int = Field(
+        title='User ID',
+        description='Unique identifier for the user',
+        examples=[1, 42, 123]
+    )
+    legacy_field: str = Field(
+        deprecated='Use new_field instead',
+        default=''
+    )
+
+# Access field info
+print(User.model_fields['id'].description)
+#> Unique identifier for the user
+```
+
+### Serialization Control
+
+<ParamField path="exclude" type="bool | None">
+  Whether to exclude the field from serialization
+</ParamField>
+
+<ParamField path="exclude_if" type="Callable[[Any], bool] | None">
+  Function to determine if field should be excluded based on its value
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    name: str
+    password: str = Field(exclude=True)
+    internal_id: int = Field(exclude_if=lambda v: v == 0)
+
+user = User(id=1, name='John', password='secret123', internal_id=0)
+
+print(user.model_dump())
+#> {'id': 1, 'name': 'John'}
+# password is excluded, internal_id is 0 so it's excluded
+```
+
+### Validation Behavior
+
+<ParamField path="validate_default" type="bool | None">
+  Whether to validate the default value
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+  Whether to use strict validation for this field
+</ParamField>
+
+<ParamField path="frozen" type="bool | None">
+  Whether the field is immutable after initialization
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+
+class Config(BaseModel):
+    port: int = Field(default=8080, validate_default=True, gt=0)
+    strict_value: int = Field(strict=True)
+    immutable_id: int = Field(frozen=True)
+
+config = Config(strict_value=42, immutable_id=1)
+
+try:
+    Config(strict_value='42', immutable_id=1)  # strict mode rejects string
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for Config
+    strict_value
+      Input should be a valid integer
+    '''
+
+# Frozen field cannot be modified
+try:
+    config.immutable_id = 2
+except ValidationError as e:
+    print(e)
+```
+
+## Required vs Optional Fields
+
+### Required Fields
+
+Fields without defaults are required:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    name: str = Field(...)  # Ellipsis also indicates required
+
+# Missing required field raises error
+try:
+    User(id=1)
+except ValidationError as e:
+    print(e)
+```
+
+### Optional Fields
+
+Fields with defaults are optional:
+
+```python
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    name: str = 'Anonymous'
+    email: Optional[str] = None
+    age: int = Field(default=0, ge=0)
+
+user = User(id=1)
+print(user.model_dump())
+#> {'id': 1, 'name': 'Anonymous', 'email': None, 'age': 0}
+```
+
+## Field Types
+
+### Standard Types
+
+Pydantic supports all Python standard types:
+
+```python
+from datetime import datetime, date
+from decimal import Decimal
+from typing import List, Dict, Set, Tuple
+from pydantic import BaseModel
+
+class Example(BaseModel):
+    # Primitives
+    integer: int
+    floating: float
+    text: str
+    flag: bool
+    
+    # Collections
+    items: List[int]
+    mapping: Dict[str, str]
+    unique: Set[str]
+    pair: Tuple[int, str]
+    
+    # Date/Time
+    timestamp: datetime
+    birth_date: date
+    
+    # Decimal for precise numbers
+    price: Decimal
+
+example = Example(
+    integer=42,
+    floating=3.14,
+    text='hello',
+    flag=True,
+    items=[1, 2, 3],
+    mapping={'key': 'value'},
+    unique={'a', 'b', 'c'},
+    pair=(1, 'one'),
+    timestamp=datetime.now(),
+    birth_date=date(1990, 1, 1),
+    price=Decimal('19.99')
+)
+```
+
+### Nested Models
+
+Fields can be other Pydantic models:
+
+```python
+from pydantic import BaseModel
+from typing import List
+
+class Address(BaseModel):
+    street: str
+    city: str
+    zipcode: str
+
+class User(BaseModel):
+    id: int
+    name: str
+    address: Address
+    previous_addresses: List[Address] = []
+
+user = User(
+    id=1,
+    name='John',
+    address={'street': '123 Main St', 'city': 'NYC', 'zipcode': '10001'},
+    previous_addresses=[{'street': '456 Oak Ave', 'city': 'LA', 'zipcode': '90001'}]
+)
+
+print(user.address.city)
+#> NYC
+```
+
+## FieldInfo Attributes
+
+The `FieldInfo` class contains comprehensive field metadata:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    name: str = Field(description='User full name', min_length=1)
+
+field_info = User.model_fields['name']
+print(field_info.annotation)
+#> <class 'str'>
+print(field_info.description)
+#> User full name
+print(field_info.is_required())
+#> True
+print(field_info.metadata)
+#> [MinLen(min_length=1)]
+```
+
+## Best Practices
+
+<Note>
+  - Use `Field()` to add validation constraints and metadata
+  - Prefer `default_factory` over mutable defaults
+  - Use aliases to map between different naming conventions
+  - Add descriptions to improve API documentation
+  - Use `strict=True` when you need exact type matching
+  - Mark sensitive fields with `exclude=True` or use `SecretStr`
+</Note>
+
+<Warning>
+  Never use mutable objects as default values:
+  ```python
+  # Bad
+  tags: List[str] = []
+  
+  # Good
+  tags: List[str] = Field(default_factory=list)
+  ```
+</Warning>

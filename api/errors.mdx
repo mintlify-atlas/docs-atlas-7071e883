@@ -1,0 +1,333 @@
+---
+title: Errors
+description: Pydantic-specific error classes
+---
+
+The `pydantic.errors` module contains custom error classes for Pydantic-specific exceptions.
+
+## ValidationError
+
+```python
+ValidationError = pydantic_core.ValidationError
+```
+
+Raised when validation fails for a Pydantic model or validated function.
+
+This error is imported from `pydantic_core` and contains detailed information about validation failures.
+
+### Attributes
+
+<ResponseField name="errors()" type="list[ErrorDetails]">
+  Returns a list of error dictionaries, each containing details about a validation error.
+</ResponseField>
+
+<ResponseField name="error_count()" type="int">
+  Returns the number of validation errors.
+</ResponseField>
+
+<ResponseField name="json()" type="str">
+  Returns a JSON string representation of the errors.
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+
+try:
+    user = User(id='not_an_int', name='John')
+except ValidationError as e:
+    print(e.error_count())
+    # 2
+    print(e.errors())
+    # [
+    #     {
+    #         'type': 'int_parsing',
+    #         'loc': ('id',),
+    #         'msg': 'Input should be a valid integer...',
+    #         'input': 'not_an_int',
+    #         'url': '...'
+    #     },
+    #     {
+    #         'type': 'missing',
+    #         'loc': ('email',),
+    #         'msg': 'Field required',
+    #         'input': {'id': 'not_an_int', 'name': 'John'},
+    #         'url': '...'
+    #     }
+    # ]
+```
+
+## PydanticUserError
+
+```python
+class PydanticUserError(PydanticErrorMixin, RuntimeError):
+    def __init__(self, message: str, *, code: PydanticErrorCodes | None)
+```
+
+An error raised due to incorrect use of Pydantic.
+
+This error is raised when you use Pydantic incorrectly, such as:
+- Using invalid configuration options
+- Creating circular model references
+- Using unsupported type annotations
+- Misconfiguring validators or serializers
+
+<ParamField path="message" type="str" required>
+  A message describing the error.
+</ParamField>
+
+<ParamField path="code" type="PydanticErrorCodes | None" required>
+  An optional error code from the PydanticErrorCodes enum.
+</ParamField>
+
+### Example
+
+```python
+from pydantic import BaseModel
+from pydantic.errors import PydanticUserError
+
+try:
+    class Model(BaseModel):
+        pass
+    
+    # This will raise PydanticUserError
+    BaseModel()
+except PydanticUserError as e:
+    print(e)
+    # BaseModel cannot be instantiated directly.
+    # For further information visit https://errors.pydantic.dev/2.13/u/base-model-instantiated
+```
+
+## PydanticUndefinedAnnotation
+
+```python
+class PydanticUndefinedAnnotation(PydanticErrorMixin, NameError):
+    def __init__(self, name: str, message: str)
+```
+
+A subclass of `NameError` raised when handling undefined annotations during CoreSchema generation.
+
+<ParamField path="name" type="str" required>
+  Name of the undefined annotation.
+</ParamField>
+
+<ParamField path="message" type="str" required>
+  Description of the error.
+</ParamField>
+
+### Methods
+
+#### from_name_error
+
+```python
+@classmethod
+def from_name_error(cls, name_error: NameError) -> Self
+```
+
+Convert a `NameError` to a `PydanticUndefinedAnnotation` error.
+
+<ParamField path="name_error" type="NameError" required>
+  The NameError to be converted.
+</ParamField>
+
+<ResponseField name="return" type="PydanticUndefinedAnnotation">
+  Converted PydanticUndefinedAnnotation error.
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import BaseModel
+from pydantic.errors import PydanticUndefinedAnnotation
+
+try:
+    class Model(BaseModel):
+        # UndefinedType is not defined
+        field: UndefinedType
+except PydanticUndefinedAnnotation as e:
+    print(e.name)
+    # 'UndefinedType'
+    print(e.message)
+    # "name 'UndefinedType' is not defined"
+```
+
+## PydanticImportError
+
+```python
+class PydanticImportError(PydanticErrorMixin, ImportError):
+    def __init__(self, message: str)
+```
+
+An error raised when an import fails due to module changes between V1 and V2.
+
+<ParamField path="message" type="str" required>
+  Description of the error.
+</ParamField>
+
+### Example
+
+```python
+try:
+    # Attempting to import V1 module in V2
+    from pydantic import parse_obj_as
+except PydanticImportError as e:
+    print(e)
+    # The `parse_obj_as` function has been removed...
+```
+
+## PydanticSchemaGenerationError
+
+```python
+class PydanticSchemaGenerationError(PydanticUserError):
+    def __init__(self, message: str)
+```
+
+An error raised during failures to generate a CoreSchema for some type.
+
+<ParamField path="message" type="str" required>
+  Description of the error.
+</ParamField>
+
+### Example
+
+```python
+from pydantic import BaseModel
+from pydantic.errors import PydanticSchemaGenerationError
+
+class CustomType:
+    pass
+
+try:
+    class Model(BaseModel):
+        # Pydantic doesn't know how to generate schema for CustomType
+        field: CustomType
+except PydanticSchemaGenerationError as e:
+    print(e)
+```
+
+## PydanticInvalidForJsonSchema
+
+```python
+class PydanticInvalidForJsonSchema(PydanticUserError):
+    def __init__(self, message: str)
+```
+
+An error raised during failures to generate a JSON schema for some CoreSchema.
+
+<ParamField path="message" type="str" required>
+  Description of the error.
+</ParamField>
+
+### Example
+
+```python
+from typing import Callable
+from pydantic import BaseModel
+from pydantic.errors import PydanticInvalidForJsonSchema
+
+class Model(BaseModel):
+    # Callable cannot be represented in JSON Schema without customization
+    callback: Callable
+
+try:
+    schema = Model.model_json_schema()
+except PydanticInvalidForJsonSchema as e:
+    print(e)
+```
+
+## PydanticForbiddenQualifier
+
+```python
+class PydanticForbiddenQualifier(PydanticUserError):
+    def __init__(self, qualifier: Qualifier, annotation: Any)
+```
+
+An error raised if a forbidden type qualifier is found in a type annotation.
+
+<ParamField path="qualifier" type="Qualifier" required>
+  The forbidden qualifier (e.g., 'required', 'not_required', 'read_only', 'class_var', 'init_var', 'final').
+</ParamField>
+
+<ParamField path="annotation" type="Any" required>
+  The annotation containing the forbidden qualifier.
+</ParamField>
+
+### Example
+
+```python
+from typing import Required
+from pydantic import BaseModel
+from pydantic.errors import PydanticForbiddenQualifier
+
+try:
+    class Model(BaseModel):
+        # Required is not allowed in BaseModel context
+        field: Required[str]
+except PydanticForbiddenQualifier as e:
+    print(e)
+```
+
+## PydanticErrorCodes
+
+```python
+PydanticErrorCodes = Literal[
+    'class-not-fully-defined',
+    'custom-json-schema',
+    'decorator-invalid-fields',
+    'decorator-missing-arguments',
+    'decorator-missing-field',
+    'discriminator-no-field',
+    'discriminator-alias-type',
+    'discriminator-needs-literal',
+    'discriminator-alias',
+    'discriminator-validator',
+    'callable-discriminator-no-tag',
+    'typed-dict-version',
+    'model-field-overridden',
+    'model-field-missing-annotation',
+    'config-both',
+    'removed-kwargs',
+    'circular-reference-schema',
+    'invalid-for-json-schema',
+    'json-schema-already-used',
+    'base-model-instantiated',
+    'undefined-annotation',
+    'schema-for-unknown-type',
+    'import-error',
+    'create-model-field-definitions',
+    'validator-instance-method',
+    'validator-input-type',
+    'root-validator-pre-skip',
+    'model-serializer-instance-method',
+    'validator-field-config-info',
+    'validator-v1-signature',
+    'validator-signature',
+    'field-serializer-signature',
+    'model-serializer-signature',
+    'multiple-field-serializers',
+    'invalid-annotated-type',
+    'type-adapter-config-unused',
+    'root-model-extra',
+    'unevaluable-type-annotation',
+    'dataclass-init-false-extra-allow',
+    'clashing-init-and-init-var',
+    'model-config-invalid-field-name',
+    'with-config-on-model',
+    'dataclass-on-model',
+    'validate-call-type',
+    'unpack-typed-dict',
+    'overlapping-unpack-typed-dict',
+    'invalid-self-type',
+    'validate-by-alias-and-name-false',
+]
+```
+
+A literal type representing all possible Pydantic error codes.
+
+Each error code corresponds to a specific type of error and links to detailed documentation at `https://errors.pydantic.dev/{version}/u/{code}`.

@@ -1,0 +1,506 @@
+---
+title: Forward References & Annotations
+description: Handle forward references and future annotations in Pydantic
+---
+
+Forward references allow you to reference types that haven't been defined yet. This is essential for self-referential models, circular dependencies, and using `from __future__ import annotations`.
+
+## Forward References Basics
+
+Reference a class before it's defined using string quotes:
+
+```python
+from pydantic import BaseModel
+from typing import Optional
+
+class Node(BaseModel):
+    value: int
+    # Forward reference to Node (not yet fully defined)
+    left: Optional['Node'] = None
+    right: Optional['Node'] = None
+
+# Create a tree structure
+root = Node(
+    value=1,
+    left=Node(value=2),
+    right=Node(value=3, left=Node(value=4))
+)
+
+print(root)
+print(root.right.left.value)  # 4
+```
+
+## Future Annotations
+
+Use `from __future__ import annotations` for cleaner syntax:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+from typing import Optional
+
+class Node(BaseModel):
+    value: int
+    # No quotes needed with future annotations
+    left: Optional[Node] = None
+    right: Optional[Node] = None
+
+node = Node(
+    value=1,
+    left=Node(value=2),
+    right=Node(value=3)
+)
+print(node)
+```
+
+<Note>
+  With `from __future__ import annotations`, all annotations become strings automatically. This is the default behavior in Python 3.11+.
+</Note>
+
+## Self-Referential Models
+
+Models that reference themselves:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+class Category(BaseModel):
+    name: str
+    subcategories: List[Category] = []
+    parent: Optional[Category] = None
+
+# Create nested categories
+electronics = Category(
+    name='Electronics',
+    subcategories=[
+        Category(name='Computers'),
+        Category(
+            name='Mobile',
+            subcategories=[
+                Category(name='Phones'),
+                Category(name='Tablets')
+            ]
+        )
+    ]
+)
+
+print(electronics.subcategories[1].subcategories[0].name)
+# 'Phones'
+```
+
+## Circular Dependencies
+
+Handle models that reference each other:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+class User(BaseModel):
+    name: str
+    posts: List[Post] = []
+
+class Post(BaseModel):
+    title: str
+    author: Optional[User] = None
+    comments: List[Comment] = []
+
+class Comment(BaseModel):
+    text: str
+    author: User
+    post: Optional[Post] = None
+
+# Use the models
+user = User(name='John')
+post = Post(
+    title='Hello World',
+    author=user,
+    comments=[
+        Comment(text='Great post!', author=user)
+    ]
+)
+
+print(post.comments[0].author.name)  # 'John'
+```
+
+## Model Rebuilding
+
+Rebuild models when forward references are resolved:
+
+```python
+from pydantic import BaseModel
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+    # Only imported for type checking
+    from .other_module import OtherModel
+
+class MyModel(BaseModel):
+    # Forward reference that may not be available yet
+    items: List['OtherModel']
+
+# Later, when OtherModel is available
+from other_module import OtherModel
+
+# Rebuild the model to resolve forward references
+MyModel.model_rebuild()
+
+# Now validation works
+model = MyModel(items=[OtherModel(...)])
+```
+
+### Manual Rebuilding
+
+Explicitly rebuild when needed:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+class Container(BaseModel):
+    items: list[Item]  # Item not defined yet
+
+class Item(BaseModel):
+    name: str
+    value: int
+
+# Rebuild Container now that Item is defined
+Container.model_rebuild()
+
+# Now it works
+container = Container(
+    items=[
+        {'name': 'item1', 'value': 1},
+        {'name': 'item2', 'value': 2}
+    ]
+)
+print(container)
+```
+
+## TypeAdapter with Forward References
+
+Use TypeAdapter for forward-referenced types:
+
+```python
+from __future__ import annotations
+
+from pydantic import TypeAdapter
+from typing import List
+
+class Node(BaseModel):
+    value: int
+    children: List[Node] = []
+
+# Create TypeAdapter for list of nodes
+ta = TypeAdapter(List[Node])
+
+# Validate data
+nodes = ta.validate_python([
+    {'value': 1, 'children': [{'value': 2}]},
+    {'value': 3}
+])
+
+print(nodes)
+```
+
+## Deferred Validation
+
+Defer validation until types are available:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class Model(BaseModel):
+    model_config = ConfigDict(defer_build=True)
+    
+    # Forward reference that will be resolved later
+    item: 'FutureItem'
+
+# Define the referenced type later
+class FutureItem(BaseModel):
+    name: str
+
+# Manually rebuild when ready
+Model.model_rebuild()
+
+model = Model(item={'name': 'test'})
+print(model)
+```
+
+## Handling Import Cycles
+
+Break circular imports with TYPE_CHECKING:
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional, List
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    # Only import for type checking, not at runtime
+    from .department import Department
+
+class Employee(BaseModel):
+    name: str
+    department: Optional[Department] = None
+    subordinates: List[Employee] = []
+
+# In department.py:
+if TYPE_CHECKING:
+    from .employee import Employee
+
+class Department(BaseModel):
+    name: str
+    employees: List[Employee] = []
+```
+
+## Generic Models with Forward References
+
+Combine generics with forward references:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+from typing import Generic, TypeVar, Optional
+
+T = TypeVar('T')
+
+class TreeNode(BaseModel, Generic[T]):
+    value: T
+    left: Optional[TreeNode[T]] = None
+    right: Optional[TreeNode[T]] = None
+
+# Create typed trees
+int_tree = TreeNode[int](
+    value=1,
+    left=TreeNode[int](value=2),
+    right=TreeNode[int](value=3)
+)
+
+str_tree = TreeNode[str](
+    value='root',
+    left=TreeNode[str](value='left'),
+    right=TreeNode[str](value='right')
+)
+
+print(int_tree.left.value)  # 2
+print(str_tree.right.value)  # 'right'
+```
+
+## Postponed Evaluation
+
+Use postponed evaluation of annotations (PEP 563):
+
+```python
+from __future__ import annotations
+
+import sys
+from pydantic import BaseModel
+
+if sys.version_info >= (3, 10):
+    # All annotations are strings until evaluated
+    class Model(BaseModel):
+        # This works even though ComplexType isn't defined yet
+        data: dict[str, list[ComplexType]]
+    
+    class ComplexType(BaseModel):
+        value: int
+    
+    Model.model_rebuild()
+```
+
+## Validation with Unresolved References
+
+Handle validation when types aren't fully resolved:
+
+```python
+from pydantic import BaseModel
+from typing import ForwardRef
+
+class Container(BaseModel):
+    items: list['Item']
+
+try:
+    # This might fail if Item isn't defined
+    container = Container(items=[])
+except Exception:
+    # Define Item
+    class Item(BaseModel):
+        name: str
+    
+    # Rebuild and try again
+    Container.model_rebuild()
+    container = Container(items=[{'name': 'test'}])
+```
+
+## Dataclasses with Forward References
+
+Use forward references in Pydantic dataclasses:
+
+```python
+from __future__ import annotations
+
+from pydantic.dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class LinkedListNode:
+    value: int
+    next: Optional[LinkedListNode] = None
+
+# Create a linked list
+node3 = LinkedListNode(value=3)
+node2 = LinkedListNode(value=2, next=node3)
+node1 = LinkedListNode(value=1, next=node2)
+
+# Traverse
+current = node1
+while current:
+    print(current.value)
+    current = current.next
+# Output: 1, 2, 3
+```
+
+## Complex Nested Forward References
+
+Handle deeply nested forward references:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+
+class Schema(BaseModel):
+    name: str
+    fields: List[Field]
+
+class Field(BaseModel):
+    name: str
+    type: str
+    schema: Optional[Schema] = None  # Nested schema
+    related: List[Field] = []         # Related fields
+
+# Create complex schema
+user_schema = Schema(
+    name='User',
+    fields=[
+        Field(name='id', type='int'),
+        Field(
+            name='profile',
+            type='object',
+            schema=Schema(
+                name='Profile',
+                fields=[
+                    Field(name='bio', type='string'),
+                    Field(name='avatar', type='url')
+                ]
+            )
+        )
+    ]
+)
+
+print(user_schema.fields[1].schema.fields[0].name)  # 'bio'
+```
+
+## Automatic Model Rebuilding
+
+Pydantic automatically rebuilds in most cases:
+
+```python
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+class Parent(BaseModel):
+    children: list[Child]
+
+class Child(BaseModel):
+    name: str
+    parent: Parent | None = None
+
+# Automatic rebuild - no explicit rebuild needed
+parent = Parent(
+    children=[
+        {'name': 'Alice'},
+        {'name': 'Bob'}
+    ]
+)
+print(parent)
+```
+
+## Best Practices
+
+<Accordion title="Use from __future__ import annotations">
+  Enable future annotations for cleaner code:
+  
+  ```python
+  from __future__ import annotations
+  
+  # Clean syntax, no quotes needed
+  class Model(BaseModel):
+      items: list[Item]
+      parent: Optional[Model] = None
+  ```
+  
+  Instead of:
+  
+  ```python
+  # Without future annotations
+  class Model(BaseModel):
+      items: List['Item']
+      parent: Optional['Model'] = None
+  ```
+</Accordion>
+
+<Accordion title="TYPE_CHECKING for Imports">
+  Use TYPE_CHECKING to avoid circular imports:
+  
+  ```python
+  from typing import TYPE_CHECKING
+  
+  if TYPE_CHECKING:
+      # Import only for type checking
+      from .other import Other
+  
+  class Model(BaseModel):
+      other: 'Other'  # String annotation
+  ```
+</Accordion>
+
+<Accordion title="Manual Rebuilding">
+  Explicitly rebuild when:
+  - Using deferred validation
+  - Dynamically creating types
+  - Working with plugins
+  
+  ```python
+  Model.model_rebuild()
+  # or for dataclasses
+  rebuild_dataclass(MyDataclass)
+  ```
+</Accordion>
+
+<Accordion title="Avoid Runtime String Evaluation">
+  With `from __future__ import annotations`, all annotations are strings.
+  Pydantic handles evaluation automatically, but be aware:
+  
+  ```python
+  from __future__ import annotations
+  
+  # Annotations are strings at runtime
+  class Model(BaseModel):
+      value: int  # This is 'int' at runtime
+  
+  # Pydantic evaluates them during validation
+  ```
+</Accordion>

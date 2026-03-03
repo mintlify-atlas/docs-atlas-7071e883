@@ -1,0 +1,304 @@
+---
+title: JSON Schema
+description: JSON Schema generation functions and classes
+---
+
+The `pydantic.json_schema` module contains classes and functions to allow the way JSON Schema is generated to be customized.
+
+In general you shouldn't need to use this module directly; instead, you can use `BaseModel.model_json_schema` and `TypeAdapter.json_schema`.
+
+## GenerateJsonSchema
+
+```python
+class GenerateJsonSchema:
+    def __init__(
+        self,
+        by_alias: bool = True,
+        ref_template: str = DEFAULT_REF_TEMPLATE,
+        union_format: Literal['any_of', 'primitive_type_array'] = 'any_of',
+    ) -> None
+```
+
+A class for generating JSON schemas.
+
+This class generates JSON schemas based on configured parameters. The default schema dialect is [https://json-schema.org/draft/2020-12/schema](https://json-schema.org/draft/2020-12/schema).
+
+<ParamField path="by_alias" type="bool" default="True">
+  Whether to use field aliases in the generated schemas.
+</ParamField>
+
+<ParamField path="ref_template" type="str" default="'#/$defs/{model}'">
+  The format string to use when generating reference names.
+</ParamField>
+
+<ParamField path="union_format" type="Literal['any_of', 'primitive_type_array']" default="'any_of'">
+  The format to use when combining schemas from unions together:
+  - `'any_of'`: Use the `anyOf` keyword to combine schemas (the default)
+  - `'primitive_type_array'`: Use the `type` keyword as an array of strings, containing each type of the combination. If any of the schemas is not a primitive type (`string`, `boolean`, `null`, `integer` or `number`) or contains constraints/metadata, falls back to `any_of`.
+</ParamField>
+
+### Attributes
+
+<ResponseField name="schema_dialect" type="str">
+  The JSON schema dialect used to generate the schema. Default: `'https://json-schema.org/draft/2020-12/schema'`
+</ResponseField>
+
+<ResponseField name="ignored_warning_kinds" type="set[JsonSchemaWarningKind]">
+  Warnings to ignore when generating the schema. Default: `{'skipped-choice'}`
+</ResponseField>
+
+<ResponseField name="by_alias" type="bool">
+  Whether to use field aliases when generating the schema.
+</ResponseField>
+
+<ResponseField name="ref_template" type="str">
+  The format string used when generating reference names.
+</ResponseField>
+
+### Methods
+
+#### generate
+
+```python
+def generate(
+    self,
+    schema: CoreSchema,
+    mode: JsonSchemaMode = 'validation'
+) -> JsonSchemaValue
+```
+
+Generates a JSON schema for a specified schema in a specified mode.
+
+<ParamField path="schema" type="CoreSchema" required>
+  A Pydantic core schema.
+</ParamField>
+
+<ParamField path="mode" type="JsonSchemaMode" default="'validation'">
+  The mode in which to generate the schema. Either `'validation'` or `'serialization'`.
+</ParamField>
+
+<ResponseField name="return" type="JsonSchemaValue">
+  A JSON schema representing the specified schema.
+</ResponseField>
+
+#### generate_definitions
+
+```python
+def generate_definitions(
+    self,
+    inputs: Sequence[tuple[JsonSchemaKeyT, JsonSchemaMode, core_schema.CoreSchema]]
+) -> tuple[dict[tuple[JsonSchemaKeyT, JsonSchemaMode], JsonSchemaValue], dict[DefsRef, JsonSchemaValue]]
+```
+
+Generates JSON schema definitions from a list of core schemas, pairing the generated definitions with a mapping that links the input keys to the definition references.
+
+<ParamField path="inputs" type="Sequence[tuple[JsonSchemaKeyT, JsonSchemaMode, core_schema.CoreSchema]]" required>
+  A sequence of tuples, where:
+  - The first element is a JSON schema key type
+  - The second element is the JSON mode: either 'validation' or 'serialization'
+  - The third element is a core schema
+</ParamField>
+
+<ResponseField name="return" type="tuple">
+  A tuple where:
+  - The first element is a dictionary whose keys are tuples of JSON schema key type and JSON mode, and whose values are the JSON schema corresponding to that pair of inputs
+  - The second element is a dictionary whose keys are definition references for the JSON schemas from the first returned element, and whose values are the actual JSON schema definitions
+</ResponseField>
+
+## model_json_schema
+
+```python
+pydantic.json_schema.model_json_schema(
+    cls: type[BaseModel] | type[PydanticDataclass],
+    by_alias: bool = True,
+    ref_template: str = DEFAULT_REF_TEMPLATE,
+    union_format: Literal['any_of', 'primitive_type_array'] = 'any_of',
+    schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+    mode: JsonSchemaMode = 'validation',
+) -> dict[str, Any]
+```
+
+Utility function to generate a JSON Schema for a model.
+
+<ParamField path="cls" type="type[BaseModel] | type[PydanticDataclass]" required>
+  The model class to generate a JSON Schema for.
+</ParamField>
+
+<ParamField path="by_alias" type="bool" default="True">
+  If `True` (the default), fields will be serialized according to their alias. If `False`, fields will be serialized according to their attribute name.
+</ParamField>
+
+<ParamField path="ref_template" type="str" default="'#/$defs/{model}'">
+  The template to use for generating JSON Schema references.
+</ParamField>
+
+<ParamField path="union_format" type="Literal['any_of', 'primitive_type_array']" default="'any_of'">
+  The format to use when combining schemas from unions together.
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateJsonSchema]" default="GenerateJsonSchema">
+  The class to use for generating the JSON Schema.
+</ParamField>
+
+<ParamField path="mode" type="JsonSchemaMode" default="'validation'">
+  The mode to use for generating the JSON Schema. Either `'validation'` or `'serialization'`.
+</ParamField>
+
+<ResponseField name="return" type="dict[str, Any]">
+  The generated JSON Schema.
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import BaseModel
+from pydantic.json_schema import model_json_schema
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str | None = None
+
+schema = model_json_schema(User)
+print(schema)
+# {
+#     'properties': {
+#         'id': {'title': 'Id', 'type': 'integer'},
+#         'name': {'title': 'Name', 'type': 'string'},
+#         'email': {
+#             'anyOf': [{'type': 'string'}, {'type': 'null'}],
+#             'default': None,
+#             'title': 'Email'
+#         }
+#     },
+#     'required': ['id', 'name'],
+#     'title': 'User',
+#     'type': 'object'
+# }
+```
+
+## models_json_schema
+
+```python
+pydantic.json_schema.models_json_schema(
+    models: Sequence[tuple[type[BaseModel] | type[PydanticDataclass], JsonSchemaMode]],
+    *,
+    by_alias: bool = True,
+    title: str | None = None,
+    description: str | None = None,
+    ref_template: str = DEFAULT_REF_TEMPLATE,
+    union_format: Literal['any_of', 'primitive_type_array'] = 'any_of',
+    schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+) -> tuple[dict[tuple[type[BaseModel] | type[PydanticDataclass], JsonSchemaMode], JsonSchemaValue], JsonSchemaValue]
+```
+
+Utility function to generate a JSON Schema for multiple models.
+
+<ParamField path="models" type="Sequence[tuple[type[BaseModel] | type[PydanticDataclass], JsonSchemaMode]]" required>
+  A sequence of tuples of the form (model, mode).
+</ParamField>
+
+<ParamField path="by_alias" type="bool" default="True">
+  Whether field aliases should be used as keys in the generated JSON Schema.
+</ParamField>
+
+<ParamField path="title" type="str | None" default="None">
+  The title of the generated JSON Schema.
+</ParamField>
+
+<ParamField path="description" type="str | None" default="None">
+  The description of the generated JSON Schema.
+</ParamField>
+
+<ParamField path="ref_template" type="str" default="'#/$defs/{model}'">
+  The reference template to use for generating JSON Schema references.
+</ParamField>
+
+<ParamField path="union_format" type="Literal['any_of', 'primitive_type_array']" default="'any_of'">
+  The format to use when combining schemas from unions together.
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateJsonSchema]" default="GenerateJsonSchema">
+  The schema generator to use for generating the JSON Schema.
+</ParamField>
+
+<ResponseField name="return" type="tuple">
+  A tuple where:
+  - The first element is a dictionary whose keys are tuples of JSON schema key type and JSON mode, and whose values are the JSON schema corresponding to that pair of inputs
+  - The second element is a JSON schema containing all definitions referenced in the first returned element, along with the optional title and description keys
+</ResponseField>
+
+## WithJsonSchema
+
+```python
+@dataclasses.dataclass
+class WithJsonSchema:
+    json_schema: JsonSchemaValue | None
+    mode: Literal['validation', 'serialization'] | None = None
+```
+
+Add this as an annotation on a field to override the (base) JSON schema that would be generated for that field.
+
+This provides a way to set a JSON schema for types that would otherwise raise errors when producing a JSON schema, such as `Callable`, or types that have an is-instance core schema, without needing to go so far as creating a custom subclass of `pydantic.json_schema.GenerateJsonSchema`.
+
+<ParamField path="json_schema" type="JsonSchemaValue | None" required>
+  The JSON schema to use for this field, or `None` to omit the field from the schema.
+</ParamField>
+
+<ParamField path="mode" type="Literal['validation', 'serialization'] | None" default="None">
+  If set, this will only apply to that schema generation mode.
+</ParamField>
+
+### Example
+
+```python
+from typing import Annotated, Callable
+from pydantic import BaseModel
+from pydantic.json_schema import WithJsonSchema
+
+class Model(BaseModel):
+    callback: Annotated[
+        Callable[[int], int],
+        WithJsonSchema({'type': 'string'})
+    ]
+
+schema = Model.model_json_schema()
+print(schema['properties']['callback'])
+# {'type': 'string', 'title': 'Callback'}
+```
+
+## Type Aliases
+
+### JsonSchemaValue
+
+```python
+JsonSchemaValue = dict[str, Any]
+```
+
+A type alias for a JSON schema value. This is a dictionary of string keys to arbitrary JSON values.
+
+### JsonSchemaMode
+
+```python
+JsonSchemaMode = Literal['validation', 'serialization']
+```
+
+A type alias that represents the mode of a JSON schema; either 'validation' or 'serialization'.
+
+For some types, the inputs to validation differ from the outputs of serialization. For example, computed fields will only be present when serializing, and should not be provided when validating. This flag provides a way to indicate whether you want the JSON schema required for validation inputs, or that will be matched by serialization outputs.
+
+### JsonSchemaWarningKind
+
+```python
+JsonSchemaWarningKind = Literal['skipped-choice', 'non-serializable-default', 'skipped-discriminator']
+```
+
+A type alias representing the kinds of warnings that can be emitted during JSON schema generation.
+
+## PydanticJsonSchemaWarning
+
+```python
+class PydanticJsonSchemaWarning(UserWarning)
+```
+
+This class is used to emit warnings produced during JSON schema generation.

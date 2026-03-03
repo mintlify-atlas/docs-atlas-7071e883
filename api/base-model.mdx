@@ -1,0 +1,724 @@
+---
+title: BaseModel
+description: Complete API reference for Pydantic's BaseModel class
+---
+
+A base class for creating Pydantic models.
+
+## Class Definition
+
+```python
+class BaseModel(metaclass=ModelMetaclass)
+```
+
+## Class Attributes
+
+<ResponseField name="model_config" type="ClassVar[ConfigDict]">
+Configuration for the model, should be a dictionary conforming to [`ConfigDict`](/api/config).
+</ResponseField>
+
+<ResponseField name="model_fields" type="dict[str, FieldInfo]">
+A mapping of field names to their respective `FieldInfo` instances.
+
+<Warning>
+Accessing this attribute from a model instance is deprecated. Access it from the model class instead.
+</Warning>
+</ResponseField>
+
+<ResponseField name="model_computed_fields" type="dict[str, ComputedFieldInfo]">
+A mapping of computed field names to their respective `ComputedFieldInfo` instances.
+</ResponseField>
+
+## Instance Attributes
+
+<ResponseField name="model_extra" type="dict[str, Any] | None">
+Get extra fields set during validation. Returns `None` if `config.extra` is not set to `"allow"`.
+</ResponseField>
+
+<ResponseField name="model_fields_set" type="set[str]">
+Returns the set of fields that have been explicitly set on this model instance.
+</ResponseField>
+
+## Constructor
+
+### `__init__`
+
+```python
+def __init__(self, /, **data: Any) -> None
+```
+
+Create a new model by parsing and validating input data from keyword arguments.
+
+<ParamField path="data" type="Any">
+Keyword arguments containing the data to validate.
+</ParamField>
+
+<ResponseField name="raises" type="ValidationError">
+If the input data cannot be validated to form a valid model.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+user = User(name='John Doe', age=30)
+print(user)
+#> name='John Doe' age=30
+```
+
+## Validation Methods
+
+### `model_validate`
+
+```python
+@classmethod
+def model_validate(
+    cls,
+    obj: Any,
+    *,
+    strict: bool | None = None,
+    extra: ExtraValues | None = None,
+    from_attributes: bool | None = None,
+    context: Any | None = None,
+    by_alias: bool | None = None,
+    by_name: bool | None = None,
+) -> Self
+```
+
+Validate a pydantic model instance.
+
+<ParamField path="obj" type="Any">
+The object to validate.
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+Whether to enforce types strictly.
+</ParamField>
+
+<ParamField path="extra" type="ExtraValues | None">
+Whether to ignore, allow, or forbid extra data during model validation.
+</ParamField>
+
+<ParamField path="from_attributes" type="bool | None">
+Whether to extract data from object attributes.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the validator.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias when validating against the provided input data.
+</ParamField>
+
+<ParamField path="by_name" type="bool | None">
+Whether to use the field's name when validating against the provided input data.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+The validated model instance.
+</ResponseField>
+
+<ResponseField name="raises" type="ValidationError">
+If the object could not be validated.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+data = {'name': 'John', 'age': '30'}
+user = User.model_validate(data)
+print(user)
+#> name='John' age=30
+```
+
+### `model_validate_json`
+
+```python
+@classmethod
+def model_validate_json(
+    cls,
+    json_data: str | bytes | bytearray,
+    *,
+    strict: bool | None = None,
+    extra: ExtraValues | None = None,
+    context: Any | None = None,
+    by_alias: bool | None = None,
+    by_name: bool | None = None,
+) -> Self
+```
+
+Validate the given JSON data against the Pydantic model.
+
+<ParamField path="json_data" type="str | bytes | bytearray">
+The JSON data to validate.
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+Whether to enforce types strictly.
+</ParamField>
+
+<ParamField path="extra" type="ExtraValues | None">
+Whether to ignore, allow, or forbid extra data during model validation.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Extra variables to pass to the validator.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias when validating.
+</ParamField>
+
+<ParamField path="by_name" type="bool | None">
+Whether to use the field's name when validating.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+The validated Pydantic model.
+</ResponseField>
+
+<ResponseField name="raises" type="ValidationError">
+If `json_data` is not a JSON string or the object could not be validated.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+json_str = '{"name": "John", "age": 30}'
+user = User.model_validate_json(json_str)
+print(user)
+#> name='John' age=30
+```
+
+### `model_validate_strings`
+
+```python
+@classmethod
+def model_validate_strings(
+    cls,
+    obj: Any,
+    *,
+    strict: bool | None = None,
+    extra: ExtraValues | None = None,
+    context: Any | None = None,
+    by_alias: bool | None = None,
+    by_name: bool | None = None,
+) -> Self
+```
+
+Validate the given object with string data against the Pydantic model.
+
+<ParamField path="obj" type="Any">
+The object containing string data to validate.
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+Whether to enforce types strictly.
+</ParamField>
+
+<ParamField path="extra" type="ExtraValues | None">
+Whether to ignore, allow, or forbid extra data.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Extra variables to pass to the validator.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias when validating.
+</ParamField>
+
+<ParamField path="by_name" type="bool | None">
+Whether to use the field's name when validating.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+The validated Pydantic model.
+</ResponseField>
+
+## Serialization Methods
+
+### `model_dump`
+
+```python
+def model_dump(
+    self,
+    *,
+    mode: Literal['json', 'python'] | str = 'python',
+    include: IncEx | None = None,
+    exclude: IncEx | None = None,
+    context: Any | None = None,
+    by_alias: bool | None = None,
+    exclude_unset: bool = False,
+    exclude_defaults: bool = False,
+    exclude_none: bool = False,
+    exclude_computed_fields: bool = False,
+    round_trip: bool = False,
+    warnings: bool | Literal['none', 'warn', 'error'] = True,
+    fallback: Callable[[Any], Any] | None = None,
+    serialize_as_any: bool = False,
+    polymorphic_serialization: bool | None = None,
+) -> dict[str, Any]
+```
+
+Generate a dictionary representation of the model.
+
+<ParamField path="mode" type="Literal['json', 'python'] | str" default="'python'">
+The mode in which to serialize. If 'json', only JSON-serializable types. If 'python', may contain Python objects.
+</ParamField>
+
+<ParamField path="include" type="IncEx | None">
+A set of fields to include in the output.
+</ParamField>
+
+<ParamField path="exclude" type="IncEx | None">
+A set of fields to exclude from the output.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the serializer.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias in the dictionary key if defined.
+</ParamField>
+
+<ParamField path="exclude_unset" type="bool" default="False">
+Whether to exclude fields that have not been explicitly set.
+</ParamField>
+
+<ParamField path="exclude_defaults" type="bool" default="False">
+Whether to exclude fields that are set to their default value.
+</ParamField>
+
+<ParamField path="exclude_none" type="bool" default="False">
+Whether to exclude fields that have a value of `None`.
+</ParamField>
+
+<ParamField path="exclude_computed_fields" type="bool" default="False">
+Whether to exclude computed fields.
+</ParamField>
+
+<ParamField path="round_trip" type="bool" default="False">
+If True, dumped values should be valid as input for non-idempotent types.
+</ParamField>
+
+<ParamField path="warnings" type="bool | Literal['none', 'warn', 'error']" default="True">
+How to handle serialization errors. False/"none" ignores them, True/"warn" logs errors, "error" raises.
+</ParamField>
+
+<ParamField path="fallback" type="Callable[[Any], Any] | None">
+A function to call when an unknown value is encountered.
+</ParamField>
+
+<ParamField path="serialize_as_any" type="bool" default="False">
+Whether to serialize fields with duck-typing serialization behavior.
+</ParamField>
+
+<ParamField path="polymorphic_serialization" type="bool | None">
+Whether to use model and dataclass polymorphic serialization.
+</ParamField>
+
+<ResponseField name="return" type="dict[str, Any]">
+A dictionary representation of the model.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int = 0
+
+user = User(name='John', age=30)
+print(user.model_dump())
+#> {'name': 'John', 'age': 30}
+print(user.model_dump(exclude_defaults=True))
+#> {'name': 'John', 'age': 30}
+```
+
+### `model_dump_json`
+
+```python
+def model_dump_json(
+    self,
+    *,
+    indent: int | None = None,
+    ensure_ascii: bool = False,
+    include: IncEx | None = None,
+    exclude: IncEx | None = None,
+    context: Any | None = None,
+    by_alias: bool | None = None,
+    exclude_unset: bool = False,
+    exclude_defaults: bool = False,
+    exclude_none: bool = False,
+    exclude_computed_fields: bool = False,
+    round_trip: bool = False,
+    warnings: bool | Literal['none', 'warn', 'error'] = True,
+    fallback: Callable[[Any], Any] | None = None,
+    serialize_as_any: bool = False,
+    polymorphic_serialization: bool | None = None,
+) -> str
+```
+
+Generates a JSON representation of the model.
+
+<ParamField path="indent" type="int | None">
+Indentation to use in the JSON output. If None, the output will be compact.
+</ParamField>
+
+<ParamField path="ensure_ascii" type="bool" default="False">
+If True, all non-ASCII characters will be escaped.
+</ParamField>
+
+<ParamField path="include" type="IncEx | None">
+Field(s) to include in the JSON output.
+</ParamField>
+
+<ParamField path="exclude" type="IncEx | None">
+Field(s) to exclude from the JSON output.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the serializer.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to serialize using field aliases.
+</ParamField>
+
+<ParamField path="exclude_unset" type="bool" default="False">
+Whether to exclude fields that have not been explicitly set.
+</ParamField>
+
+<ParamField path="exclude_defaults" type="bool" default="False">
+Whether to exclude fields that are set to their default value.
+</ParamField>
+
+<ParamField path="exclude_none" type="bool" default="False">
+Whether to exclude fields with a value of `None`.
+</ParamField>
+
+<ParamField path="exclude_computed_fields" type="bool" default="False">
+Whether to exclude computed fields.
+</ParamField>
+
+<ParamField path="round_trip" type="bool" default="False">
+If True, dumped values should be valid as input.
+</ParamField>
+
+<ParamField path="warnings" type="bool | Literal['none', 'warn', 'error']" default="True">
+How to handle serialization errors.
+</ParamField>
+
+<ParamField path="fallback" type="Callable[[Any], Any] | None">
+A function to call when an unknown value is encountered.
+</ParamField>
+
+<ParamField path="serialize_as_any" type="bool" default="False">
+Whether to serialize fields with duck-typing serialization behavior.
+</ParamField>
+
+<ParamField path="polymorphic_serialization" type="bool | None">
+Whether to use model and dataclass polymorphic serialization.
+</ParamField>
+
+<ResponseField name="return" type="str">
+A JSON string representation of the model.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+user = User(name='John', age=30)
+print(user.model_dump_json())
+#> {"name":"John","age":30}
+print(user.model_dump_json(indent=2))
+#> {
+#>   "name": "John",
+#>   "age": 30
+#> }
+```
+
+## Construction Methods
+
+### `model_construct`
+
+```python
+@classmethod
+def model_construct(
+    cls,
+    _fields_set: set[str] | None = None,
+    **values: Any
+) -> Self
+```
+
+Creates a new instance of the Model class with validated data.
+
+Creates a new model setting `__dict__` and `__pydantic_fields_set__` from trusted or pre-validated data. Default values are respected, but no other validation is performed.
+
+<ParamField path="_fields_set" type="set[str] | None">
+A set of field names that were originally explicitly set. If provided, this is directly used for the `model_fields_set` attribute.
+</ParamField>
+
+<ParamField path="values" type="Any">
+Trusted or pre-validated data dictionary.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+A new instance of the Model class with validated data.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int = 0
+
+user = User.model_construct(name='John', age=30)
+print(user)
+#> name='John' age=30
+```
+
+### `model_copy`
+
+```python
+def model_copy(
+    self,
+    *,
+    update: Mapping[str, Any] | None = None,
+    deep: bool = False
+) -> Self
+```
+
+Returns a copy of the model.
+
+<ParamField path="update" type="Mapping[str, Any] | None">
+Values to change/add in the new model. Note: the data is not validated before creating the new model.
+</ParamField>
+
+<ParamField path="deep" type="bool" default="False">
+Set to True to make a deep copy of the model.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+New model instance.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+user = User(name='John', age=30)
+user_copy = user.model_copy(update={'age': 31})
+print(user_copy)
+#> name='John' age=31
+print(user)
+#> name='John' age=30
+```
+
+## Schema Methods
+
+### `model_json_schema`
+
+```python
+@classmethod
+def model_json_schema(
+    cls,
+    by_alias: bool = True,
+    ref_template: str = DEFAULT_REF_TEMPLATE,
+    schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+    mode: JsonSchemaMode = 'validation',
+    *,
+    union_format: Literal['any_of', 'primitive_type_array'] = 'any_of',
+) -> dict[str, Any]
+```
+
+Generates a JSON schema for a model class.
+
+<ParamField path="by_alias" type="bool" default="True">
+Whether to use attribute aliases or not.
+</ParamField>
+
+<ParamField path="ref_template" type="str">
+The reference template.
+</ParamField>
+
+<ParamField path="union_format" type="Literal['any_of', 'primitive_type_array']" default="'any_of'">
+The format to use when combining schemas from unions together.
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateJsonSchema]">
+To override the logic used to generate the JSON schema.
+</ParamField>
+
+<ParamField path="mode" type="JsonSchemaMode" default="'validation'">
+The mode in which to generate the schema.
+</ParamField>
+
+<ResponseField name="return" type="dict[str, Any]">
+The JSON schema for the given model class.
+</ResponseField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+schema = User.model_json_schema()
+print(schema)
+#> {'properties': {'name': {'title': 'Name', 'type': 'string'}, 'age': {'title': 'Age', 'type': 'integer'}}, 'required': ['name', 'age'], 'title': 'User', 'type': 'object'}
+```
+
+### `model_rebuild`
+
+```python
+@classmethod
+def model_rebuild(
+    cls,
+    *,
+    force: bool = False,
+    raise_errors: bool = True,
+    _parent_namespace_depth: int = 2,
+    _types_namespace: MappingNamespace | None = None,
+) -> bool | None
+```
+
+Try to rebuild the pydantic-core schema for the model.
+
+This may be necessary when one of the annotations is a ForwardRef which could not be resolved during the initial attempt to build the schema.
+
+<ParamField path="force" type="bool" default="False">
+Whether to force the rebuilding of the model schema.
+</ParamField>
+
+<ParamField path="raise_errors" type="bool" default="True">
+Whether to raise errors.
+</ParamField>
+
+<ParamField path="_parent_namespace_depth" type="int" default="2">
+The depth level of the parent namespace.
+</ParamField>
+
+<ParamField path="_types_namespace" type="MappingNamespace | None">
+The types namespace.
+</ParamField>
+
+<ResponseField name="return" type="bool | None">
+Returns `None` if the schema is already "complete". If rebuilding was required, returns `True` if successful, otherwise `False`.
+</ResponseField>
+
+```python
+from __future__ import annotations
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    friend: User | None = None
+
+# Rebuild to resolve the forward reference
+User.model_rebuild()
+```
+
+### `model_parametrized_name`
+
+```python
+@classmethod
+def model_parametrized_name(cls, params: tuple[type[Any], ...]) -> str
+```
+
+Compute the class name for parametrizations of generic classes.
+
+<ParamField path="params" type="tuple[type[Any], ...]">
+Tuple of types of the class.
+</ParamField>
+
+<ResponseField name="return" type="str">
+String representing the new class where params are passed to cls as type variables.
+</ResponseField>
+
+<ResponseField name="raises" type="TypeError">
+Raised when trying to generate concrete names for non-generic models.
+</ResponseField>
+
+## Lifecycle Hooks
+
+### `model_post_init`
+
+```python
+def model_post_init(self, context: Any, /) -> None
+```
+
+Override this method to perform additional initialization after `__init__` and `model_construct`.
+
+This is useful if you want to do some validation that requires the entire model to be initialized.
+
+<ParamField path="context" type="Any">
+The context passed to the model during initialization.
+</ParamField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+    
+    def model_post_init(self, context):
+        print(f'User {self.name} created!')
+
+user = User(name='John', age=30)
+#> User John created!
+```
+
+## Magic Methods
+
+### `__copy__`
+
+```python
+def __copy__(self) -> Self
+```
+
+Returns a shallow copy of the model.
+
+<ResponseField name="return" type="Self">
+A shallow copy of the model.
+</ResponseField>
+
+### `__deepcopy__`
+
+```python
+def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self
+```
+
+Returns a deep copy of the model.
+
+<ParamField path="memo" type="dict[int, Any] | None">
+Memoization dictionary for deepcopy.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+A deep copy of the model.
+</ResponseField>

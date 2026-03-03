@@ -1,0 +1,475 @@
+---
+title: Union Types
+description: Validate union types and discriminated unions in Pydantic
+---
+
+Union types allow fields to accept multiple different types. Pydantic provides powerful support for union validation, including discriminated unions for improved performance and better error messages.
+
+## Basic Union Types
+
+Define fields that accept multiple types:
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: Union[int, str]
+
+print(Model(value=42))        # value=42
+print(Model(value='hello'))   # value='hello'
+print(Model(value=3.14))      # value=3 (coerced to int)
+```
+
+## Union Validation Order
+
+By default, Pydantic uses "smart" union validation:
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: Union[int, str, bool]
+
+# Smart mode tries to match the best type
+print(Model(value='123'))   # value='123' (str, not coerced to int)
+print(Model(value=123))     # value=123 (int)
+print(Model(value=True))    # value=True (bool)
+```
+
+### Left-to-Right Mode
+
+Force strict left-to-right validation:
+
+```python
+from typing import Union
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    # Try int first, then str
+    value: Union[int, str] = Field(union_mode='left_to_right')
+
+print(Model(value='123'))  # value=123 (coerced to int)
+print(Model(value='abc'))  # value='abc' (str, can't be int)
+```
+
+## Discriminated Unions
+
+Discriminated unions use a field to determine which type to validate. This is much faster and provides better error messages.
+
+### Basic Discriminated Union
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+
+class Cat(BaseModel):
+    pet_type: Literal['cat']
+    meows: int
+
+class Dog(BaseModel):
+    pet_type: Literal['dog']
+    barks: float
+
+class Pet(BaseModel):
+    pet: Union[Cat, Dog] = Field(discriminator='pet_type')
+
+# Efficient validation based on pet_type
+cat = Pet(pet={'pet_type': 'cat', 'meows': 5})
+print(cat)
+# pet=Cat(pet_type='cat', meows=5)
+
+dog = Pet(pet={'pet_type': 'dog', 'barks': 3.5})
+print(dog)
+# pet=Dog(pet_type='dog', barks=3.5)
+```
+
+### Nested Models with Discriminator
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+
+class SuccessResponse(BaseModel):
+    status: Literal['success']
+    data: dict
+
+class ErrorResponse(BaseModel):
+    status: Literal['error']
+    error_message: str
+    error_code: int
+
+class ApiResponse(BaseModel):
+    response: Union[SuccessResponse, ErrorResponse] = Field(
+        discriminator='status'
+    )
+
+# Success case
+success = ApiResponse(
+    response={
+        'status': 'success',
+        'data': {'user_id': 123}
+    }
+)
+print(success.response.data)
+# {'user_id': 123}
+
+# Error case  
+error = ApiResponse(
+    response={
+        'status': 'error',
+        'error_message': 'Not found',
+        'error_code': 404
+    }
+)
+print(error.response.error_message)
+# 'Not found'
+```
+
+## Callable Discriminator
+
+Use a function to determine the discriminator value:
+
+```python
+from typing import Annotated, Any, Literal, Union
+from pydantic import BaseModel, Discriminator, Tag
+
+class Pie(BaseModel):
+    time_to_cook: int
+    num_ingredients: int
+
+class ApplePie(Pie):
+    fruit: Literal['apple'] = 'apple'
+
+class PumpkinPie(Pie):
+    filling: Literal['pumpkin'] = 'pumpkin'
+
+def get_discriminator_value(v: Any) -> str:
+    if isinstance(v, dict):
+        return v.get('fruit', v.get('filling'))
+    return getattr(v, 'fruit', getattr(v, 'filling', None))
+
+class Dessert(BaseModel):
+    dish: Annotated[
+        Union[
+            Annotated[ApplePie, Tag('apple')],
+            Annotated[PumpkinPie, Tag('pumpkin')],
+        ],
+        Discriminator(get_discriminator_value),
+    ]
+
+apple = Dessert(
+    dish={'fruit': 'apple', 'time_to_cook': 60, 'num_ingredients': 8}
+)
+print(apple)
+# dish=ApplePie(time_to_cook=60, num_ingredients=8, fruit='apple')
+
+pumpkin = Dessert(
+    dish={'filling': 'pumpkin', 'time_to_cook': 40, 'num_ingredients': 6}
+)
+print(pumpkin)
+# dish=PumpkinPie(time_to_cook=40, num_ingredients=6, filling='pumpkin')
+```
+
+## Union with None (Optional)
+
+Handle optional fields with Union:
+
+```python
+from typing import Union, Optional
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    # These are equivalent
+    value1: Union[str, None]
+    value2: Optional[str]
+    value3: str | None  # Python 3.10+
+
+model = Model(value1=None, value2=None, value3=None)
+print(model)
+# value1=None value2=None value3=None
+
+model = Model(value1='a', value2='b', value3='c')
+print(model)
+# value1='a' value2='b' value3='c'
+```
+
+## Multiple Model Union
+
+Union of different model types:
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    email: str
+
+class Organization(BaseModel):
+    name: str
+    domain: str
+    employee_count: int
+
+class Owner(BaseModel):
+    entity: Union[User, Organization]
+
+# User owner
+user_owner = Owner(
+    entity={'name': 'John', 'email': 'john@example.com'}
+)
+print(user_owner.entity)
+# name='John' email='john@example.com'
+
+# Organization owner
+org_owner = Owner(
+    entity={
+        'name': 'Acme Corp',
+        'domain': 'acme.com',
+        'employee_count': 100
+    }
+)
+print(org_owner.entity)
+# name='Acme Corp' domain='acme.com' employee_count=100
+```
+
+## Union of Primitives and Models
+
+Mix primitive types with models:
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class DetailedResponse(BaseModel):
+    data: dict
+    metadata: dict
+
+class SimpleModel(BaseModel):
+    # Can be a string, int, or complex model
+    result: Union[str, int, DetailedResponse]
+
+print(SimpleModel(result='simple'))
+# result='simple'
+
+print(SimpleModel(result=42))
+# result=42
+
+print(SimpleModel(result={
+    'data': {'key': 'value'},
+    'metadata': {'version': '1.0'}
+}))
+# result=DetailedResponse(...)
+```
+
+## Tagged Union with Enum
+
+Use enums for discriminator values:
+
+```python
+from enum import Enum
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+
+class MessageType(str, Enum):
+    TEXT = 'text'
+    IMAGE = 'image'
+    VIDEO = 'video'
+
+class TextMessage(BaseModel):
+    type: Literal[MessageType.TEXT]
+    content: str
+
+class ImageMessage(BaseModel):
+    type: Literal[MessageType.IMAGE]
+    url: str
+    width: int
+    height: int
+
+class VideoMessage(BaseModel):
+    type: Literal[MessageType.VIDEO]
+    url: str
+    duration: int
+
+class Message(BaseModel):
+    message: Union[TextMessage, ImageMessage, VideoMessage] = Field(
+        discriminator='type'
+    )
+
+text_msg = Message(
+    message={'type': 'text', 'content': 'Hello'}
+)
+print(text_msg.message.content)
+# 'Hello'
+
+image_msg = Message(
+    message={
+        'type': 'image',
+        'url': 'https://example.com/img.jpg',
+        'width': 800,
+        'height': 600
+    }
+)
+print(image_msg.message.width)
+# 800
+```
+
+## Union Validation Errors
+
+Handle validation errors in unions:
+
+```python
+from typing import Union
+from pydantic import BaseModel, ValidationError
+
+class Model(BaseModel):
+    value: Union[int, str]
+
+try:
+    # This will try to validate as int, then str
+    # Both will fail for list input
+    Model(value=[1, 2, 3])
+except ValidationError as e:
+    print(e)
+    # Shows validation attempts for all union members
+```
+
+## Performance Optimization
+
+Discriminated unions are significantly faster:
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+import timeit
+
+# Without discriminator - tries each type
+class TypeA(BaseModel):
+    value: str
+
+class TypeB(BaseModel):
+    value: int
+
+class SlowUnion(BaseModel):
+    data: Union[TypeA, TypeB]
+
+# With discriminator - direct match
+class FastTypeA(BaseModel):
+    type: Literal['a']
+    value: str
+
+class FastTypeB(BaseModel):
+    type: Literal['b']
+    value: int
+
+class FastUnion(BaseModel):
+    data: Union[FastTypeA, FastTypeB] = Field(discriminator='type')
+
+# FastUnion is much faster for validation
+```
+
+## Nested Discriminated Unions
+
+Nest discriminated unions for complex hierarchies:
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+
+class Circle(BaseModel):
+    shape: Literal['circle']
+    radius: float
+
+class Rectangle(BaseModel):
+    shape: Literal['rectangle']
+    width: float
+    height: float
+
+class RedShape(BaseModel):
+    color: Literal['red']
+    shape: Union[Circle, Rectangle] = Field(discriminator='shape')
+
+class BlueShape(BaseModel):
+    color: Literal['blue']
+    shape: Union[Circle, Rectangle] = Field(discriminator='shape')
+
+class Drawing(BaseModel):
+    element: Union[RedShape, BlueShape] = Field(discriminator='color')
+
+drawing = Drawing(
+    element={
+        'color': 'red',
+        'shape': {'shape': 'circle', 'radius': 5.0}
+    }
+)
+print(drawing.element.shape.radius)
+# 5.0
+```
+
+## Union with Literals
+
+Combine literal values in unions:
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    status: Union[Literal['active'], Literal['inactive'], Literal['pending']]
+    # Equivalent to:
+    # status: Literal['active', 'inactive', 'pending']
+
+print(Model(status='active'))
+# status='active'
+
+try:
+    Model(status='unknown')
+except ValidationError as e:
+    print(e)
+    # Input should be 'active', 'inactive' or 'pending'
+```
+
+## Best Practices
+
+<Accordion title="When to Use Discriminated Unions">
+  Use discriminated unions when:
+  - You have a clear discriminator field
+  - Performance matters (large unions)
+  - You want better error messages
+  - Validating API payloads with type fields
+  
+  ```python
+  # Good - fast and clear
+  class Event(BaseModel):
+      event: Union[ClickEvent, ScrollEvent] = Field(
+          discriminator='type'
+      )
+  
+  # Less optimal - tries each type
+  class Event(BaseModel):
+      event: Union[ClickEvent, ScrollEvent]
+  ```
+</Accordion>
+
+<Accordion title="Union Order Matters">
+  In non-discriminated unions, order affects validation:
+  
+  ```python
+  # bool before int - bool is a subclass of int
+  value: Union[bool, int]  # Correct
+  value: Union[int, bool]  # bool values become int
+  
+  # More specific types first
+  value: Union[SpecificModel, BaseModel]
+  ```
+</Accordion>
+
+<Accordion title="Error Handling">
+  Discriminated unions provide clearer errors:
+  
+  ```python
+  # With discriminator: "Invalid discriminator value"
+  # Without: Multiple validation errors from each union member
+  ```
+</Accordion>

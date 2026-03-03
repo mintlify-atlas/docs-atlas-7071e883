@@ -1,0 +1,183 @@
+---
+title: Introduction to Pydantic
+description: Data validation using Python type hints - Fast, extensible, and developer-friendly
+---
+
+# Welcome to Pydantic
+
+Data validation using Python type hints. Fast and extensible, Pydantic plays nicely with your linters/IDE/brain. Define how data should be in pure, canonical Python 3.9+; validate it with Pydantic.
+
+<CardGroup cols={2}>
+  <Card title="Why Pydantic" icon="rocket" href="/get-started/why-pydantic">
+    Discover the benefits of using Pydantic for data validation
+  </Card>
+  <Card title="Installation" icon="download" href="/get-started/installation">
+    Get started with pip, conda, or uv in seconds
+  </Card>
+  <Card title="Quick Start" icon="bolt" href="/get-started/quickstart">
+    Build your first validated model in minutes
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/models">
+    Deep dive into models, fields, and validators
+  </Card>
+</CardGroup>
+
+## What is Pydantic?
+
+Pydantic is the most widely used data validation library for Python. It leverages Python type hints to validate data and provide helpful error messages when data is invalid.
+
+```python
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str = 'John Doe'
+    signup_ts: Optional[datetime] = None
+    friends: list[int] = []
+
+external_data = {'id': '123', 'signup_ts': '2017-06-01 12:22', 'friends': [1, '2', b'3']}
+user = User(**external_data)
+print(user)
+#> User id=123 name='John Doe' signup_ts=datetime.datetime(2017, 6, 1, 12, 22) friends=[1, 2, 3]
+print(user.id)
+#> 123
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Type Safety" icon="shield-check">
+    Leverage Python's type hints for runtime validation and static type checking with mypy and pyright
+  </Card>
+  
+  <Card title="Performance" icon="gauge-high">
+    Built on pydantic-core written in Rust, offering exceptional validation speed
+  </Card>
+  
+  <Card title="IDE Support" icon="code">
+    Excellent autocomplete and type checking in VSCode, PyCharm, and other modern IDEs
+  </Card>
+  
+  <Card title="JSON Schema" icon="file-code">
+    Automatic JSON Schema generation for API documentation and validation
+  </Card>
+  
+  <Card title="Extensible" icon="puzzle-piece">
+    Custom validators, serializers, and types to handle any validation scenario
+  </Card>
+  
+  <Card title="Developer Experience" icon="heart">
+    Clear error messages, intuitive API, and extensive documentation
+  </Card>
+</CardGroup>
+
+## Automatic Data Coercion
+
+Pydantic automatically converts data to the correct type when possible:
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    a: float
+    b: int = 10
+
+m = Model(a='10.2', b='100')
+print(m.model_dump())
+#> {'a': 10.2, 'b': 100}
+```
+
+Notice how:
+- The string `'10.2'` was converted to `float` `10.2`
+- The string `'100'` was converted to `int` `100`
+
+## Clear Error Messages
+
+When validation fails, Pydantic provides detailed, actionable error messages:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Model(BaseModel):
+    a: float
+    b: int = 10
+
+try:
+    Model(a='x', b='x')
+except ValidationError as e:
+    print(e)
+    '''
+    2 validation errors for Model
+    a
+      Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='x', input_type=str]
+    b
+      Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]
+    '''
+```
+
+## Built-in Types
+
+Pydantic provides a rich set of specialized types for common validation scenarios:
+
+```python
+from pydantic import BaseModel, EmailStr, HttpUrl, PositiveInt
+
+class ApiRequest(BaseModel):
+    user_id: PositiveInt
+    email: EmailStr
+    website: HttpUrl
+
+request = ApiRequest(
+    user_id='42',
+    email='user@example.com',
+    website='https://example.com'
+)
+```
+
+<Tip>
+Pydantic includes specialized types for URLs, emails, IP addresses, file paths, payment cards, colors, and much more. See the [Types documentation](/concepts/types) for the full list.
+</Tip>
+
+## Serialization
+
+Easily serialize your models to dictionaries or JSON:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+
+user = User(id=123, name='John Doe')
+
+# To dictionary
+print(user.model_dump())
+#> {'id': 123, 'name': 'John Doe'}
+
+# To JSON string
+print(user.model_dump_json())
+#> {"id":123,"name":"John Doe"}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Learn Why Pydantic" icon="lightbulb" href="/get-started/why-pydantic">
+    Understand the advantages of using Pydantic
+  </Card>
+  
+  <Card title="Install Pydantic" icon="download" href="/get-started/installation">
+    Set up Pydantic in your project
+  </Card>
+  
+  <Card title="Quick Start Tutorial" icon="rocket" href="/get-started/quickstart">
+    Build your first validation model
+  </Card>
+  
+  <Card title="Explore Examples" icon="book-open" href="/examples">
+    See real-world usage patterns
+  </Card>
+</CardGroup>

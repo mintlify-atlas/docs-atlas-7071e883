@@ -1,0 +1,352 @@
+---
+title: TypeAdapter
+description: Validate and serialize standalone types without creating a model
+---
+
+The `TypeAdapter` class provides a flexible way to perform validation and serialization for types that aren't Pydantic models. This is particularly useful for validating primitive types, dataclasses, TypedDicts, and other Python types.
+
+## Overview
+
+TypeAdapter exposes validation and serialization methods similar to `BaseModel`, but for any Python type. You can use it to:
+
+- Validate primitive types with constraints
+- Work with dataclasses and TypedDicts
+- Validate complex nested structures
+- Generate JSON schemas for any type
+
+<Note>
+  `TypeAdapter` instances are not types and cannot be used as type annotations. They are runtime validation helpers.
+</Note>
+
+## Basic Usage
+
+Create a TypeAdapter by passing a type to validate:
+
+```python
+from pydantic import TypeAdapter
+
+# Simple type validation
+ta = TypeAdapter(int)
+result = ta.validate_python('123')
+print(result)  # 123
+print(type(result))  # <class 'int'>
+```
+
+## Validating Collections
+
+TypeAdapter works with generic types and collections:
+
+```python
+from typing import List
+from pydantic import TypeAdapter
+
+# List validation
+list_adapter = TypeAdapter(List[int])
+data = list_adapter.validate_python(['1', '2', '3'])
+print(data)  # [1, 2, 3]
+
+# Dict validation
+from typing import Dict
+dict_adapter = TypeAdapter(Dict[str, int])
+result = dict_adapter.validate_python({'a': '1', 'b': '2'})
+print(result)  # {'a': 1, 'b': 2}
+```
+
+## Core Methods
+
+<Steps>
+
+### validate_python
+
+Validate a Python object against the type:
+
+```python
+from typing import List
+from pydantic import TypeAdapter, ValidationError
+
+ta = TypeAdapter(List[int])
+
+# Valid data
+result = ta.validate_python([1, 2, 3])
+print(result)  # [1, 2, 3]
+
+# Invalid data raises ValidationError
+try:
+    ta.validate_python(['a', 'b', 'c'])
+except ValidationError as e:
+    print(e)
+```
+
+### validate_json
+
+Validate JSON data directly:
+
+```python
+from pydantic import TypeAdapter
+from typing import Dict
+
+ta = TypeAdapter(Dict[str, int])
+
+# Parse and validate JSON
+json_data = '{"x": 1, "y": 2}'
+result = ta.validate_json(json_data)
+print(result)  # {'x': 1, 'y': 2}
+```
+
+### dump_python
+
+Serialize an instance to a Python object:
+
+```python
+from dataclasses import dataclass
+from pydantic import TypeAdapter
+
+@dataclass
+class User:
+    name: str
+    age: int
+
+ta = TypeAdapter(User)
+user = User(name='John', age=30)
+data = ta.dump_python(user)
+print(data)  # {'name': 'John', 'age': 30}
+```
+
+### dump_json
+
+Serialize to JSON bytes:
+
+```python
+from typing import List
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(List[int])
+json_bytes = ta.dump_json([1, 2, 3])
+print(json_bytes)  # b'[1,2,3]'
+```
+
+</Steps>
+
+## Configuration
+
+Pass a `ConfigDict` to customize validation behavior:
+
+```python
+from pydantic import TypeAdapter, ConfigDict
+from typing import List
+
+ta = TypeAdapter(
+    List[int],
+    config=ConfigDict(strict=True)
+)
+
+# Strict mode - won't coerce strings to ints
+try:
+    ta.validate_python(['1', '2', '3'])
+except ValidationError as e:
+    print(e)  # Validation error - strict mode
+
+# This works
+result = ta.validate_python([1, 2, 3])
+print(result)  # [1, 2, 3]
+```
+
+<Warning>
+  You cannot provide a config when the type already has its own config (BaseModel, dataclass, or TypedDict). This raises a `type-adapter-config-unused` error.
+</Warning>
+
+## JSON Schema Generation
+
+Generate JSON schemas for any type:
+
+```python
+from typing import List, Optional
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(List[Optional[int]])
+schema = ta.json_schema()
+print(schema)
+# {
+#     'items': {'anyOf': [{'type': 'integer'}, {'type': 'null'}]},
+#     'type': 'array'
+# }
+```
+
+## Working with Union Types
+
+TypeAdapter handles union types effectively:
+
+```python
+from typing import Union
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(Union[int, str, bool])
+
+print(ta.validate_python(42))      # 42
+print(ta.validate_python('hello')) # 'hello'
+print(ta.validate_python(True))    # True
+```
+
+## Validation Modes
+
+Control validation strictness with parameters:
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(int)
+
+# Lax mode (default) - allows coercion
+result = ta.validate_python('123', strict=False)
+print(result)  # 123
+
+# Strict mode - no coercion
+try:
+    ta.validate_python('123', strict=True)
+except ValidationError as e:
+    print("Strict validation failed")
+```
+
+## Serialization Options
+
+Customize serialization output:
+
+```python
+from typing import Optional
+from pydantic import TypeAdapter
+from dataclasses import dataclass
+
+@dataclass
+class User:
+    name: str
+    email: Optional[str] = None
+
+ta = TypeAdapter(User)
+user = User(name='John', email=None)
+
+# Exclude None values
+data = ta.dump_python(user, exclude_none=True)
+print(data)  # {'name': 'John'}
+
+# Include None values (default)
+data = ta.dump_python(user, exclude_none=False)
+print(data)  # {'name': 'John', 'email': None}
+```
+
+## Rebuilding Schemas
+
+If you have forward references that couldn't be resolved initially:
+
+```python
+from typing import List, TYPE_CHECKING
+from pydantic import TypeAdapter
+
+if TYPE_CHECKING:
+    from .models import User
+
+ta = TypeAdapter(List['User'])
+
+# Later, when the type is available
+ta.rebuild(force=True, raise_errors=True)
+```
+
+## Advanced Example
+
+Combining TypeAdapter with complex types:
+
+```python
+from typing import Dict, List, Union
+from pydantic import TypeAdapter, Field
+from typing_extensions import Annotated
+
+# Complex nested type
+DataType = Dict[
+    str,
+    List[Union[int, str]]
+]
+
+ta = TypeAdapter(DataType)
+
+# Validate complex structure
+data = {
+    'numbers': [1, 2, 3],
+    'mixed': ['a', 1, 'b', 2]
+}
+
+validated = ta.validate_python(data)
+print(validated)
+# {'numbers': [1, 2, 3], 'mixed': ['a', 1, 'b', 2]}
+
+# Serialize to JSON
+json_output = ta.dump_json(validated, indent=2)
+print(json_output.decode())
+```
+
+## Use Cases
+
+<Accordion title="API Response Validation">
+  Validate API responses without creating dedicated models:
+
+  ```python
+  from typing import List, Dict
+  from pydantic import TypeAdapter
+  import httpx
+
+  ResponseType = List[Dict[str, str]]
+  ta = TypeAdapter(ResponseType)
+
+  response = httpx.get('https://api.example.com/users')
+  validated_data = ta.validate_json(response.content)
+  ```
+</Accordion>
+
+<Accordion title="Configuration Files">
+  Validate configuration dictionaries:
+
+  ```python
+  from typing import Dict, Any
+  from pydantic import TypeAdapter
+  import json
+
+  ConfigType = Dict[str, Any]
+  ta = TypeAdapter(ConfigType)
+
+  with open('config.json') as f:
+      config = ta.validate_python(json.load(f))
+  ```
+</Accordion>
+
+<Accordion title="Third-party Dataclasses">
+  Add validation to existing dataclasses:
+
+  ```python
+  from dataclasses import dataclass
+  from pydantic import TypeAdapter
+
+  @dataclass
+  class ThirdPartyData:
+      value: int
+      name: str
+
+  ta = TypeAdapter(ThirdPartyData)
+  validated = ta.validate_python({'value': '42', 'name': 'test'})
+  print(validated)  # ThirdPartyData(value=42, name='test')
+  ```
+</Accordion>
+
+## Key Attributes
+
+TypeAdapter exposes several useful attributes:
+
+- `core_schema`: The core schema for the type
+- `validator`: The schema validator instance
+- `serializer`: The schema serializer instance  
+- `pydantic_complete`: Whether the core schema was successfully built
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(int)
+print(ta.pydantic_complete)  # True
+print(ta.core_schema['type'])  # 'int'
+```

@@ -1,0 +1,426 @@
+---
+title: ConfigDict
+description: Complete API reference for Pydantic's ConfigDict configuration options
+---
+
+A TypedDict for configuring Pydantic behaviour.
+
+## Type Definition
+
+```python
+class ConfigDict(TypedDict, total=False)
+```
+
+## Configuration Options
+
+### Model Metadata
+
+<ParamField path="title" type="str | None">
+The title for the generated JSON schema, defaults to the model's name.
+</ParamField>
+
+<ParamField path="model_title_generator" type="Callable[[type], str] | None">
+A callable that takes a model class and returns the title for it.
+</ParamField>
+
+<ParamField path="field_title_generator" type="Callable[[str, FieldInfo | ComputedFieldInfo], str] | None">
+A callable that takes a field's name and info and returns title for it.
+</ParamField>
+
+### String Processing
+
+<ParamField path="str_to_lower" type="bool">
+Whether to convert all characters to lowercase for str types. Defaults to `False`.
+</ParamField>
+
+<ParamField path="str_to_upper" type="bool">
+Whether to convert all characters to uppercase for str types. Defaults to `False`.
+</ParamField>
+
+<ParamField path="str_strip_whitespace" type="bool">
+Whether to strip leading and trailing whitespace for str types.
+</ParamField>
+
+<ParamField path="str_min_length" type="int">
+The minimum length for str types.
+</ParamField>
+
+<ParamField path="str_max_length" type="int | None">
+The maximum length for str types.
+</ParamField>
+
+### Validation Behavior
+
+<ParamField path="extra" type="ExtraValues | None" default="'ignore'">
+Whether to ignore, allow, or forbid extra data during model initialization. Can be `'ignore'`, `'allow'`, or `'forbid'`.
+</ParamField>
+
+<ParamField path="frozen" type="bool" default="False">
+Whether models are faux-immutable (prevents `__setattr__`). Also generates a `__hash__()` method.
+</ParamField>
+
+<ParamField path="validate_assignment" type="bool" default="False">
+Whether to validate the data when the model is changed.
+</ParamField>
+
+<ParamField path="validate_default" type="bool" default="False">
+Whether to validate default values during validation.
+</ParamField>
+
+<ParamField path="validate_return" type="bool" default="False">
+Whether to validate the return value from call validators.
+</ParamField>
+
+<ParamField path="strict" type="bool" default="False">
+Whether strict validation is applied to all fields on the model.
+</ParamField>
+
+<ParamField path="revalidate_instances" type="Literal['always', 'never', 'subclass-instances']" default="'never'">
+When and how to revalidate models and dataclasses during validation.
+</ParamField>
+
+<ParamField path="from_attributes" type="bool">
+Whether to build models and look up discriminators of tagged unions using python object attributes.
+</ParamField>
+
+<ParamField path="arbitrary_types_allowed" type="bool" default="False">
+Whether arbitrary types are allowed for field types.
+</ParamField>
+
+<ParamField path="use_enum_values" type="bool" default="False">
+Whether to populate models with the `value` property of enums, rather than the raw enum.
+</ParamField>
+
+### Alias Configuration
+
+<ParamField path="populate_by_name" type="bool" default="False">
+Whether an aliased field may be populated by its name as given by the model attribute, as well as the alias.
+
+<Warning>
+Deprecated in v2.11+. Use `validate_by_name` and `validate_by_alias` instead.
+</Warning>
+</ParamField>
+
+<ParamField path="validate_by_alias" type="bool" default="True">
+Whether an aliased field may be populated by its alias. New in v2.11.
+</ParamField>
+
+<ParamField path="validate_by_name" type="bool" default="False">
+Whether an aliased field may be populated by its name. New in v2.11.
+</ParamField>
+
+<ParamField path="serialize_by_alias" type="bool" default="False">
+Whether an aliased field should be serialized by its alias. New in v2.11. Expected to default to `True` in v3.
+</ParamField>
+
+<ParamField path="alias_generator" type="Callable[[str], str] | AliasGenerator | None">
+A callable that takes a field name and returns an alias for it, or an instance of `AliasGenerator`.
+</ParamField>
+
+<ParamField path="loc_by_alias" type="bool" default="True">
+Whether to use the actual key provided in the data for error `loc`s rather than the field's name.
+</ParamField>
+
+### JSON Schema
+
+<ParamField path="json_schema_extra" type="JsonDict | JsonSchemaExtraCallable | None">
+A dict or callable to provide extra JSON schema properties.
+</ParamField>
+
+<ParamField path="json_schema_serialization_defaults_required" type="bool" default="False">
+Whether fields with default values should be marked as required in the serialization schema.
+</ParamField>
+
+<ParamField path="json_schema_mode_override" type="Literal['validation', 'serialization', None]">
+If not `None`, the specified mode will be used to generate the JSON schema regardless of the `mode` parameter.
+</ParamField>
+
+### JSON Serialization
+
+<ParamField path="ser_json_timedelta" type="Literal['iso8601', 'float']" default="'iso8601'">
+The format of JSON serialized timedeltas.
+
+<Warning>
+Deprecated. Use `ser_json_temporal` instead.
+</Warning>
+</ParamField>
+
+<ParamField path="ser_json_temporal" type="Literal['iso8601', 'seconds', 'milliseconds']" default="'iso8601'">
+The format of JSON serialized temporal types (datetime, date, time, timedelta).
+</ParamField>
+
+<ParamField path="val_temporal_unit" type="Literal['seconds', 'milliseconds', 'infer']" default="'infer'">
+The unit to assume for validating numeric input for datetime-like types.
+</ParamField>
+
+<ParamField path="ser_json_bytes" type="Literal['utf8', 'base64', 'hex']" default="'utf8'">
+The encoding of JSON serialized bytes.
+</ParamField>
+
+<ParamField path="val_json_bytes" type="Literal['utf8', 'base64', 'hex']" default="'utf8'">
+The encoding of JSON serialized bytes to decode.
+</ParamField>
+
+<ParamField path="ser_json_inf_nan" type="Literal['null', 'constants', 'strings']" default="'null'">
+The encoding of JSON serialized infinity and NaN float values.
+</ParamField>
+
+### Legacy JSON Encoders
+
+<ParamField path="json_encoders" type="dict[type[object], JsonEncoder] | None">
+A dict of custom JSON encoders for specific types.
+
+<Warning>
+Deprecated carryover from v1. May be removed in the future.
+</Warning>
+</ParamField>
+
+### Error Handling
+
+<ParamField path="hide_input_in_errors" type="bool" default="False">
+Whether to hide inputs when printing errors.
+</ParamField>
+
+<ParamField path="validation_error_cause" type="bool" default="False">
+If True, Python exceptions that were part of a validation failure will be shown as an exception group.
+</ParamField>
+
+### Protected Namespaces
+
+<ParamField path="protected_namespaces" type="tuple[str | Pattern[str], ...]" default="('model_validate', 'model_dump')">
+A tuple of strings and/or regex patterns that prevent models from having fields with names that conflict with existing members/methods.
+</ParamField>
+
+### Type Constraints
+
+<ParamField path="allow_inf_nan" type="bool" default="True">
+Whether to allow infinity and NaN values to float and decimal fields.
+</ParamField>
+
+<ParamField path="coerce_numbers_to_str" type="bool" default="False">
+If True, enables automatic coercion of any Number type to str in "lax" mode.
+</ParamField>
+
+### Advanced Options
+
+<ParamField path="ignored_types" type="tuple[type, ...]" default="()">
+A tuple of types that may occur as values of class attributes without annotations.
+</ParamField>
+
+<ParamField path="defer_build" type="bool" default="False">
+Whether to defer model validator and serializer construction until the first model validation.
+</ParamField>
+
+<ParamField path="plugin_settings" type="dict[str, object] | None">
+A dict of settings for plugins.
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateSchema] | None">
+The GenerateSchema class to use during core schema generation.
+
+<Warning>
+Deprecated in v2.10. The GenerateSchema class is private and highly subject to change.
+</Warning>
+</ParamField>
+
+<ParamField path="regex_engine" type="Literal['rust-regex', 'python-re']" default="'rust-regex'">
+The regex engine to be used for pattern validation.
+</ParamField>
+
+<ParamField path="cache_strings" type="bool | Literal['all', 'keys', 'none']" default="True">
+Whether to cache strings to avoid constructing new Python objects.
+</ParamField>
+
+<ParamField path="use_attribute_docstrings" type="bool" default="False">
+Whether docstrings of attributes should be used for field descriptions.
+</ParamField>
+
+<ParamField path="url_preserve_empty_path" type="bool" default="False">
+Whether to preserve empty URL paths when validating values for a URL type.
+</ParamField>
+
+<ParamField path="polymorphic_serialization" type="bool" default="False">
+Whether to use polymorphic serialization for subclasses of the model or Pydantic dataclass.
+</ParamField>
+
+## Usage Examples
+
+### Basic Configuration
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+    
+    name: str
+    email: str
+
+user = User(name='  John  ', email='john@example.com')
+print(user.name)
+#> John
+
+user.name = '  Jane  '
+print(user.name)
+#> Jane
+```
+
+### Strict Mode
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    age: int
+    score: float
+
+try:
+    model = StrictModel(age='30', score=95.5)
+except Exception as e:
+    print(e)
+    #> Input should be a valid integer
+```
+
+### Extra Fields
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class AllowExtra(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    name: str
+
+model = AllowExtra(name='John', age=30)
+print(model.model_dump())
+#> {'name': 'John', 'age': 30}
+
+class ForbidExtra(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str
+
+try:
+    model = ForbidExtra(name='John', age=30)
+except Exception as e:
+    print(e)
+    #> Extra inputs are not permitted
+```
+
+### Frozen Models
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class FrozenModel(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    name: str
+
+model = FrozenModel(name='John')
+try:
+    model.name = 'Jane'
+except Exception as e:
+    print(e)
+    #> Instance is frozen
+```
+
+### Alias Configuration
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        validate_by_alias=True,
+        serialize_by_alias=True,
+    )
+    
+    first_name: str
+    last_name: str
+
+user = User(firstName='John', lastName='Doe')
+print(user.model_dump(by_alias=True))
+#> {'firstName': 'John', 'lastName': 'Doe'}
+```
+
+### JSON Schema Configuration
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class Product(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {'name': 'Widget', 'price': 9.99}
+            ]
+        }
+    )
+    
+    name: str
+    price: float
+
+schema = Product.model_json_schema()
+print(schema.get('examples'))
+#> [{'name': 'Widget', 'price': 9.99}]
+```
+
+### Using with_config Decorator
+
+```python
+from typing_extensions import TypedDict
+from pydantic import ConfigDict, TypeAdapter, with_config
+
+@with_config(ConfigDict(str_to_lower=True))
+class UserDict(TypedDict):
+    name: str
+    email: str
+
+ta = TypeAdapter(UserDict)
+result = ta.validate_python({'name': 'JOHN', 'email': 'JOHN@EXAMPLE.COM'})
+print(result)
+#> {'name': 'john', 'email': 'john@example.com'}
+```
+
+## with_config Function
+
+```python
+def with_config(
+    config: ConfigDict | None = None,
+    /,
+    **kwargs: Unpack[ConfigDict]
+) -> Callable[[_TypeT], _TypeT]
+```
+
+A convenience decorator to set a Pydantic configuration on a `TypedDict` or a `dataclass` from the standard library.
+
+<ParamField path="config" type="ConfigDict | None">
+Configuration dictionary to apply. Can also be passed as keyword arguments.
+</ParamField>
+
+<ParamField path="kwargs" type="ConfigDict">
+Configuration options as keyword arguments.
+</ParamField>
+
+<ResponseField name="return" type="Callable[[_TypeT], _TypeT]">
+A decorator that applies the configuration.
+</ResponseField>
+
+```python
+from typing_extensions import TypedDict
+from pydantic import ConfigDict, with_config
+
+@with_config(str_to_lower=True, str_strip_whitespace=True)
+class MyDict(TypedDict):
+    name: str
+
+# or using ConfigDict
+@with_config(ConfigDict(str_to_lower=True))
+class MyDict2(TypedDict):
+    name: str
+```

@@ -1,0 +1,531 @@
+---
+title: Custom Types
+description: Create custom types and validators for specialized validation logic
+---
+
+# Custom Types and Validators
+
+Learn how to extend Pydantic with custom types, validators, and validation logic to handle specialized use cases beyond built-in types.
+
+## Custom Validators with Annotated
+
+The most common way to create reusable custom validation is with `Annotated` types:
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, AfterValidator, ValidationError
+
+def validate_positive(value: int) -> int:
+    if value <= 0:
+        raise ValueError('must be positive')
+    return value
+
+PositiveInt = Annotated[int, AfterValidator(validate_positive)]
+
+class Product(BaseModel):
+    price: PositiveInt
+    quantity: PositiveInt
+
+product = Product(price=100, quantity=5)
+print(product)  # price=100 quantity=5
+
+try:
+    Product(price=-10, quantity=5)
+except ValidationError as e:
+    print(e)
+```
+
+## Before and After Validators
+
+<CodeGroup>
+
+```python Before Validator
+from typing import Annotated
+from pydantic import BaseModel, BeforeValidator
+
+def convert_to_int(value) -> int:
+    """Convert before type validation"""
+    if isinstance(value, str) and value.endswith('%'):
+        return int(value[:-1])
+    return value
+
+Percentage = Annotated[int, BeforeValidator(convert_to_int)]
+
+class Stats(BaseModel):
+    completion: Percentage
+
+stats = Stats(completion='75%')
+print(stats.completion)  # 75
+```
+
+```python After Validator
+from typing import Annotated
+from pydantic import BaseModel, AfterValidator
+
+def ensure_even(value: int) -> int:
+    """Validate after type conversion"""
+    if value % 2 != 0:
+        raise ValueError('must be even')
+    return value
+
+EvenInt = Annotated[int, AfterValidator(ensure_even)]
+
+class Config(BaseModel):
+    batch_size: EvenInt
+
+config = Config(batch_size=100)
+config2 = Config(batch_size='50')  # String coerced to int, then validated
+```
+
+</CodeGroup>
+
+## Wrap Validators
+
+Wrap validators control the entire validation process:
+
+```python
+from typing import Annotated, Any
+from pydantic import BaseModel, WrapValidator, ValidationInfo
+from pydantic_core import ValidatorFunctionWrapHandler
+from datetime import date
+
+def sixties_validator(
+    value: Any,
+    handler: ValidatorFunctionWrapHandler,
+    info: ValidationInfo
+) -> date:
+    """Validate dates in the 1960s"""
+    if value == 'epoch':
+        return date.fromtimestamp(0)
+    
+    # Call the default validator
+    result = handler(value)
+    
+    if not date(1960, 1, 1) <= result < date(1970, 1, 1):
+        raise ValueError(f'{value} is not in the sixties!')
+    
+    return result
+
+SixtiesDate = Annotated[date, WrapValidator(sixties_validator)]
+
+class HistoricalEvent(BaseModel):
+    event_date: SixtiesDate
+
+event = HistoricalEvent(event_date='epoch')
+event2 = HistoricalEvent(event_date='1965-07-30')
+print(event2.event_date)  # 1965-07-30
+```
+
+<Note>
+Wrap validators receive a `handler` function that runs the default Pydantic validation. You can:
+- Run validation before calling the handler (preprocessing)
+- Run validation after calling the handler (postprocessing)
+- Replace validation entirely by not calling the handler
+</Note>
+
+## Custom Datetime Validators
+
+Create timezone-aware datetime validators:
+
+```python
+import datetime as dt
+from dataclasses import dataclass
+from typing import Annotated, Any, Callable
+import pytz
+from pydantic_core import CoreSchema, core_schema
+from pydantic import BaseModel, GetCoreSchemaHandler
+
+@dataclass(frozen=True)
+class TimezoneValidator:
+    tz_constraint: str
+    
+    def validate_timezone(self, value: dt.datetime, handler: Callable) -> dt.datetime:
+        """Ensure datetime has correct timezone"""
+        result = handler(value)
+        
+        if str(result.tzinfo) != self.tz_constraint:
+            raise ValueError(
+                f'Invalid timezone: {result.tzinfo}, expected: {self.tz_constraint}'
+            )
+        
+        return result
+    
+    def __get_pydantic_core_schema__(
+        self,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
+    ) -> CoreSchema:
+        return core_schema.no_info_wrap_validator_function(
+            self.validate_timezone,
+            handler(source_type),
+        )
+
+class Meeting(BaseModel):
+    start: Annotated[dt.datetime, TimezoneValidator('America/Los_Angeles')]
+    end: Annotated[dt.datetime, TimezoneValidator('America/Los_Angeles')]
+
+la_tz = pytz.timezone('America/Los_Angeles')
+meeting = Meeting(
+    start=dt.datetime(2024, 3, 15, 9, 0, tzinfo=la_tz),
+    end=dt.datetime(2024, 3, 15, 10, 0, tzinfo=la_tz)
+)
+```
+
+## Field Validators
+
+Apply validators to specific model fields:
+
+```python
+from pydantic import BaseModel, field_validator
+import re
+
+class UserAccount(BaseModel):
+    username: str
+    password: str
+    email: str
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if not v.isalnum():
+            raise ValueError('must be alphanumeric')
+        if len(v) < 3:
+            raise ValueError('must be at least 3 characters')
+        return v.lower()
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('must be at least 8 characters')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('must contain uppercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('must contain digit')
+        return v
+
+account = UserAccount(
+    username='JohnDoe',
+    password='SecurePass123',
+    email='john@example.com'
+)
+print(account.username)  # johndoe (lowercased)
+```
+
+## Model Validators
+
+Validate entire models with access to all fields:
+
+```python
+from pydantic import BaseModel, model_validator
+from typing_extensions import Self
+from datetime import datetime
+
+class DateRange(BaseModel):
+    start_date: datetime
+    end_date: datetime
+    name: str
+    
+    @model_validator(mode='after')
+    def validate_date_range(self) -> Self:
+        if self.end_date <= self.start_date:
+            raise ValueError('end_date must be after start_date')
+        return self
+
+range_data = DateRange(
+    start_date='2024-01-01',
+    end_date='2024-12-31',
+    name='Fiscal Year 2024'
+)
+print(range_data.name)  # Fiscal Year 2024
+```
+
+## Validating Nested Models with Context
+
+Pass validation context to nested models:
+
+```python
+from pydantic import BaseModel, field_validator, ValidationInfo
+
+class User(BaseModel):
+    username: str
+    password: str
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str, info: ValidationInfo) -> str:
+        # Access context passed during validation
+        forbidden = info.context.get('forbidden_passwords', []) if info.context else []
+        
+        if v in forbidden:
+            raise ValueError(f'Password {v} is forbidden')
+        return v
+
+class Organization(BaseModel):
+    forbidden_passwords: list[str]
+    users: list[User]
+    
+    @field_validator('forbidden_passwords', mode='after')
+    @classmethod
+    def add_context(cls, v: list[str], info: ValidationInfo) -> list[str]:
+        # Mutate context to pass to nested validators
+        if info.context is not None:
+            info.context.update({'forbidden_passwords': v})
+        return v
+
+org_data = {
+    'forbidden_passwords': ['password123', 'admin'],
+    'users': [
+        {'username': 'alice', 'password': 'SecurePass1'},
+        {'username': 'bob', 'password': 'MyP@ssw0rd'}
+    ]
+}
+
+org = Organization.model_validate(org_data, context={})
+```
+
+<Tip>
+Use validation context to:
+- Share data between parent and nested validators
+- Pass configuration to validators
+- Implement cross-field validation in nested structures
+</Tip>
+
+## Custom Type with Core Schema
+
+Build fully custom types with low-level schema control:
+
+```python
+from typing import Any
+from pydantic import BaseModel, GetCoreSchemaHandler
+from pydantic_core import CoreSchema, core_schema
+
+class ColorHex:
+    """Custom color type that stores hex values"""
+    def __init__(self, hex_value: str):
+        if not hex_value.startswith('#'):
+            hex_value = f'#{hex_value}'
+        if len(hex_value) != 7:
+            raise ValueError('Hex color must be 6 characters')
+        self.hex = hex_value.upper()
+    
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
+    ) -> CoreSchema:
+        def validate(value: Any) -> 'ColorHex':
+            if isinstance(value, cls):
+                return value
+            if isinstance(value, str):
+                return cls(value)
+            raise ValueError(f'Cannot convert {type(value)} to ColorHex')
+        
+        return core_schema.no_info_plain_validator_function(
+            validate,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda x: x.hex
+            )
+        )
+    
+    def __repr__(self):
+        return f'ColorHex({self.hex})'
+
+class Theme(BaseModel):
+    primary: ColorHex
+    secondary: ColorHex
+
+theme = Theme(primary='FF5733', secondary='#33FF57')
+print(theme.primary)  # ColorHex(#FF5733)
+print(theme.model_dump())
+# {'primary': '#FF5733', 'secondary': '#33FF57'}
+```
+
+## Reusable Constrained Types
+
+<Steps>
+
+### Step 1: Define Type Constraints
+
+Create constrained types that can be reused:
+
+```python
+from typing import Annotated
+from pydantic import Field, BaseModel
+
+# Define reusable constrained types
+PositiveInt = Annotated[int, Field(gt=0)]
+NonEmptyStr = Annotated[str, Field(min_length=1)]
+EmailAddress = Annotated[str, Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')]
+Percentage = Annotated[float, Field(ge=0.0, le=100.0)]
+```
+
+### Step 2: Use in Multiple Models
+
+```python
+class Product(BaseModel):
+    name: NonEmptyStr
+    price: PositiveInt
+    discount: Percentage
+
+class Order(BaseModel):
+    order_id: PositiveInt
+    customer_email: EmailAddress
+    total: PositiveInt
+```
+
+### Step 3: Compose Complex Types
+
+```python
+from typing import List
+
+class Campaign(BaseModel):
+    name: NonEmptyStr
+    emails: List[EmailAddress]
+    completion: Percentage
+    clicks: PositiveInt
+```
+
+</Steps>
+
+## Validators with Multiple Fields
+
+Validate relationships between fields:
+
+```python
+from pydantic import BaseModel, field_validator, ValidationInfo
+
+class Registration(BaseModel):
+    password: str
+    confirm_password: str
+    email: str
+    confirm_email: str
+    
+    @field_validator('confirm_password')
+    @classmethod
+    def passwords_match(cls, v: str, info: ValidationInfo) -> str:
+        if 'password' in info.data and v != info.data['password']:
+            raise ValueError('passwords do not match')
+        return v
+    
+    @field_validator('confirm_email')
+    @classmethod
+    def emails_match(cls, v: str, info: ValidationInfo) -> str:
+        if 'email' in info.data and v != info.data['email']:
+            raise ValueError('emails do not match')
+        return v
+
+reg = Registration(
+    password='SecurePass123',
+    confirm_password='SecurePass123',
+    email='user@example.com',
+    confirm_email='user@example.com'
+)
+```
+
+## Plain Validators
+
+Replace default validation entirely:
+
+```python
+from typing import Annotated, Any
+from pydantic import BaseModel, PlainValidator
+
+def parse_bool(value: Any) -> bool:
+    """Custom boolean parser"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value = value.lower()
+        if value in ('true', 'yes', '1', 'on'):
+            return True
+        if value in ('false', 'no', '0', 'off'):
+            return False
+    raise ValueError(f'Cannot parse {value} as boolean')
+
+FlexibleBool = Annotated[bool, PlainValidator(parse_bool)]
+
+class Settings(BaseModel):
+    debug: FlexibleBool
+    enabled: FlexibleBool
+
+settings = Settings(debug='yes', enabled='on')
+print(settings)  # debug=True enabled=True
+```
+
+## Chaining Multiple Validators
+
+Combine multiple validators on a single field:
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, BeforeValidator, AfterValidator
+
+def strip_whitespace(value: str) -> str:
+    return value.strip()
+
+def uppercase(value: str) -> str:
+    return value.upper()
+
+def validate_code_format(value: str) -> str:
+    if not value.startswith('CODE-'):
+        raise ValueError('must start with CODE-')
+    return value
+
+ProductCode = Annotated[
+    str,
+    BeforeValidator(strip_whitespace),
+    BeforeValidator(uppercase),
+    AfterValidator(validate_code_format)
+]
+
+class Item(BaseModel):
+    code: ProductCode
+
+item = Item(code='  code-12345  ')
+print(item.code)  # CODE-12345
+```
+
+## Custom Serialization
+
+Control how custom types are serialized:
+
+```python
+from pydantic import BaseModel, PlainSerializer
+from typing import Annotated
+from datetime import datetime
+
+def serialize_timestamp(dt: datetime) -> int:
+    """Serialize datetime as Unix timestamp"""
+    return int(dt.timestamp())
+
+Timestamp = Annotated[
+    datetime,
+    PlainSerializer(serialize_timestamp)
+]
+
+class Event(BaseModel):
+    name: str
+    occurred_at: Timestamp
+
+event = Event(name='Deployment', occurred_at='2024-03-15T10:00:00')
+print(event.model_dump())
+# {'name': 'Deployment', 'occurred_at': 1710496800}
+```
+
+## Summary
+
+Custom types and validators enable:
+
+- Reusable validation logic with `Annotated` types
+- Before, after, and wrap validators for different validation stages
+- Field validators for single-field validation
+- Model validators for cross-field validation
+- Validation context for nested model validation
+- Custom core schemas for complete type control
+- Constrained types that can be composed
+- Custom serialization for output control
+- Chained validators for complex validation pipelines
+
+These tools allow you to extend Pydantic to handle any validation scenario in your application.

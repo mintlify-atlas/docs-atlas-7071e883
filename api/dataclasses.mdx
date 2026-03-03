@@ -1,0 +1,199 @@
+---
+title: Dataclasses
+description: Pydantic dataclass decorator and related functions
+---
+
+The `pydantic.dataclasses` module provides enhanced dataclasses with validation capabilities.
+
+## dataclass
+
+```python
+pydantic.dataclasses.dataclass(
+    _cls: type[_T] | None = None,
+    *,
+    init: Literal[False] = False,
+    repr: bool = True,
+    eq: bool = True,
+    order: bool = False,
+    unsafe_hash: bool = False,
+    frozen: bool | None = None,
+    config: ConfigDict | type[object] | None = None,
+    validate_on_init: bool | None = None,
+    kw_only: bool = False,
+    slots: bool = False,
+)
+```
+
+A decorator used to create a Pydantic-enhanced dataclass, similar to the standard Python `dataclass`, but with added validation.
+
+This function should be used similarly to `dataclasses.dataclass`.
+
+<ParamField path="_cls" type="type[_T] | None">
+  The target dataclass. When using the decorator without arguments, this is the decorated class.
+</ParamField>
+
+<ParamField path="init" type="Literal[False]" default="False">
+  Included for signature compatibility with `dataclasses.dataclass`, and is passed through to `dataclasses.dataclass` when appropriate. If specified, must be set to `False`, as pydantic inserts its own `__init__` function.
+</ParamField>
+
+<ParamField path="repr" type="bool" default="True">
+  A boolean indicating whether to include the field in the `__repr__` output.
+</ParamField>
+
+<ParamField path="eq" type="bool" default="True">
+  Determines if a `__eq__` method should be generated for the class.
+</ParamField>
+
+<ParamField path="order" type="bool" default="False">
+  Determines if comparison magic methods should be generated, such as `__lt__`, but not `__eq__`.
+</ParamField>
+
+<ParamField path="unsafe_hash" type="bool" default="False">
+  Determines if a `__hash__` method should be included in the class, as in `dataclasses.dataclass`.
+</ParamField>
+
+<ParamField path="frozen" type="bool | None" default="None">
+  Determines if the generated class should be a 'frozen' dataclass, which does not allow its attributes to be modified after it has been initialized. If not set, the value from the provided `config` argument will be used (and will default to `False` otherwise).
+</ParamField>
+
+<ParamField path="config" type="ConfigDict | type[object] | None" default="None">
+  The Pydantic config to use for the dataclass.
+</ParamField>
+
+<ParamField path="validate_on_init" type="bool | None" default="None">
+  A deprecated parameter included for backwards compatibility; in V2, all Pydantic dataclasses are validated on init.
+</ParamField>
+
+<ParamField path="kw_only" type="bool" default="False">
+  Determines if `__init__` method parameters must be specified by keyword only. Defaults to `False`. Only available in Python 3.10+.
+</ParamField>
+
+<ParamField path="slots" type="bool" default="False">
+  Determines if the generated class should be a 'slots' dataclass, which does not allow the addition of new attributes after instantiation. Only available in Python 3.10+.
+</ParamField>
+
+<ResponseField name="return" type="Callable[[type[_T]], type[PydanticDataclass]] | type[PydanticDataclass]">
+  A decorator that accepts a class as its argument and returns a Pydantic dataclass.
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import ValidationError
+from pydantic.dataclasses import dataclass
+
+@dataclass
+class User:
+    id: int
+    name: str
+    email: str
+
+# Valid data
+user = User(id=1, name='John Doe', email='john@example.com')
+print(user)
+# User(id=1, name='John Doe', email='john@example.com')
+
+# Invalid data raises ValidationError
+try:
+    user = User(id='not an int', name='Jane', email='jane@example.com')
+except ValidationError as e:
+    print(e)
+```
+
+## rebuild_dataclass
+
+```python
+pydantic.dataclasses.rebuild_dataclass(
+    cls: type[PydanticDataclass],
+    *,
+    force: bool = False,
+    raise_errors: bool = True,
+    _parent_namespace_depth: int = 2,
+    _types_namespace: MappingNamespace | None = None,
+) -> bool | None
+```
+
+Try to rebuild the pydantic-core schema for the dataclass.
+
+This may be necessary when one of the annotations is a ForwardRef which could not be resolved during the initial attempt to build the schema, and automatic rebuilding fails.
+
+This is analogous to `BaseModel.model_rebuild`.
+
+<ParamField path="cls" type="type[PydanticDataclass]" required>
+  The class to rebuild the pydantic-core schema for.
+</ParamField>
+
+<ParamField path="force" type="bool" default="False">
+  Whether to force the rebuilding of the schema.
+</ParamField>
+
+<ParamField path="raise_errors" type="bool" default="True">
+  Whether to raise errors.
+</ParamField>
+
+<ParamField path="_parent_namespace_depth" type="int" default="2">
+  The depth level of the parent namespace.
+</ParamField>
+
+<ParamField path="_types_namespace" type="MappingNamespace | None" default="None">
+  The types namespace.
+</ParamField>
+
+<ResponseField name="return" type="bool | None">
+  Returns `None` if the schema is already "complete" and rebuilding was not required. If rebuilding was required, returns `True` if rebuilding was successful, otherwise `False`.
+</ResponseField>
+
+### Example
+
+```python
+from __future__ import annotations
+from pydantic.dataclasses import dataclass, rebuild_dataclass
+
+@dataclass
+class Node:
+    value: int
+    next: Node | None = None
+
+# Rebuild to resolve forward reference
+rebuild_dataclass(Node)
+
+node = Node(value=1, next=Node(value=2))
+print(node)
+# Node(value=1, next=Node(value=2, next=None))
+```
+
+## is_pydantic_dataclass
+
+```python
+pydantic.dataclasses.is_pydantic_dataclass(
+    class_: type[Any], /
+) -> TypeGuard[type[PydanticDataclass]]
+```
+
+Whether a class is a pydantic dataclass.
+
+<ParamField path="class_" type="type[Any]" required>
+  The class to check.
+</ParamField>
+
+<ResponseField name="return" type="TypeGuard[type[PydanticDataclass]]">
+  `True` if the class is a pydantic dataclass, `False` otherwise.
+</ResponseField>
+
+### Example
+
+```python
+import dataclasses
+from pydantic.dataclasses import dataclass, is_pydantic_dataclass
+
+@dataclass
+class PydanticUser:
+    name: str
+
+@dataclasses.dataclass
+class StandardUser:
+    name: str
+
+print(is_pydantic_dataclass(PydanticUser))  # True
+print(is_pydantic_dataclass(StandardUser))  # False
+```

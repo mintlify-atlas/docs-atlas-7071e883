@@ -1,0 +1,619 @@
+---
+title: Network Types
+description: Network-related types for URL and email validation
+---
+
+Pydantic provides specialized types for validating network-related data like URLs, emails, and IP addresses.
+
+## URL Types
+
+### AnyUrl
+
+Base type for all URLs. Any scheme allowed, TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, AnyUrl
+
+class Model(BaseModel):
+    url: AnyUrl
+
+print(Model(url='http://example.com').url)
+print(Model(url='ftp://files.example.com').url)
+```
+
+URL properties:
+- `scheme`: the URL scheme (e.g., `http`)
+- `host`: the URL host (e.g., `example.com`)
+- `username`: optional username
+- `password`: optional password
+- `port`: optional port
+- `path`: optional path
+- `query`: optional query string
+- `fragment`: optional fragment
+
+### AnyHttpUrl
+
+A type that will accept any http or https URL. TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, AnyHttpUrl
+
+class Model(BaseModel):
+    url: AnyHttpUrl
+
+print(Model(url='http://example.com').url)
+print(Model(url='https://secure.example.com').url)
+```
+
+### HttpUrl
+
+A type that will accept any http or https URL with a max length of 2083.
+
+```python
+from pydantic import BaseModel, HttpUrl, ValidationError
+
+class MyModel(BaseModel):
+    url: HttpUrl
+
+m = MyModel(url='http://www.example.com')
+print(m.url)
+# http://www.example.com/
+
+try:
+    MyModel(url='ftp://invalid.url')
+except ValidationError as e:
+    print(e)
+    # URL scheme should be 'http' or 'https'
+```
+
+International domains will be punycode encoded:
+
+```python
+from pydantic import BaseModel, HttpUrl
+
+class MyModel(BaseModel):
+    url: HttpUrl
+
+m1 = MyModel(url='http://puny£code.com')
+print(m1.url)
+# http://xn--punycode-eja.com/
+
+m2 = MyModel(url='https://www.аррӏе.com/')
+print(m2.url)
+# https://www.xn--80ak6aa92e.com/
+```
+
+### WebsocketUrl
+
+A type that will accept any ws or wss URL with a max length of 2083.
+
+```python
+from pydantic import BaseModel, WebsocketUrl
+
+class Model(BaseModel):
+    url: WebsocketUrl
+
+print(Model(url='ws://localhost:8000').url)
+print(Model(url='wss://secure.example.com').url)
+```
+
+### AnyWebsocketUrl
+
+A type that will accept any ws or wss URL. TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, AnyWebsocketUrl
+
+class Model(BaseModel):
+    url: AnyWebsocketUrl
+```
+
+### FileUrl
+
+A type that will accept any file URL. Host not required.
+
+```python
+from pydantic import BaseModel, FileUrl
+
+class Model(BaseModel):
+    url: FileUrl
+
+print(Model(url='file:///path/to/file.txt').url)
+```
+
+### FtpUrl
+
+A type that will accept ftp URLs. TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, FtpUrl
+
+class Model(BaseModel):
+    url: FtpUrl
+
+print(Model(url='ftp://files.example.com').url)
+```
+
+### UrlConstraints
+
+Url constraints for customizing URL validation.
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the url
+</ParamField>
+
+<ParamField path="allowed_schemes" type="list[str] | None">
+  The allowed schemes
+</ParamField>
+
+<ParamField path="host_required" type="bool | None">
+  Whether the host is required
+</ParamField>
+
+<ParamField path="default_host" type="str | None">
+  The default host
+</ParamField>
+
+<ParamField path="default_port" type="int | None">
+  The default port
+</ParamField>
+
+<ParamField path="default_path" type="str | None">
+  The default path
+</ParamField>
+
+<ParamField path="preserve_empty_path" type="bool | None">
+  Whether to preserve empty URL paths
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, UrlConstraints
+from pydantic_core import Url
+
+CustomUrl = Annotated[
+    Url,
+    UrlConstraints(
+        max_length=100,
+        allowed_schemes=['http', 'https']
+    )
+]
+
+class Model(BaseModel):
+    url: CustomUrl
+```
+
+## Database DSN Types
+
+### PostgresDsn
+
+A type that will accept any Postgres DSN. User info required, TLD not required, host required, supports multiple hosts.
+
+```python
+from pydantic import BaseModel, PostgresDsn
+
+class MyDatabaseModel(BaseModel):
+    db: PostgresDsn
+
+m = MyDatabaseModel(db='postgres://user:pass@localhost:5432/foobar')
+print(m.db)
+# postgres://user:pass@localhost:5432/foobar
+```
+
+Supported schemes:
+- `postgres`
+- `postgresql`
+- `postgresql+asyncpg`
+- `postgresql+pg8000`
+- `postgresql+psycopg`
+- `postgresql+psycopg2`
+- `postgresql+psycopg2cffi`
+- `postgresql+py-postgresql`
+- `postgresql+pygresql`
+
+### CockroachDsn
+
+A type that will accept any Cockroach DSN. User info required, TLD not required, host required.
+
+```python
+from pydantic import BaseModel, CockroachDsn
+
+class Model(BaseModel):
+    db: CockroachDsn
+
+print(Model(db='cockroachdb://user:pass@localhost:26257/db').db)
+```
+
+Supported schemes:
+- `cockroachdb`
+- `cockroachdb+psycopg2`
+- `cockroachdb+asyncpg`
+
+### MySQLDsn
+
+A type that will accept any MySQL DSN. User info required, TLD not required, host required.
+
+```python
+from pydantic import BaseModel, MySQLDsn
+
+class Model(BaseModel):
+    db: MySQLDsn
+
+print(Model(db='mysql://user:pass@localhost:3306/db').db)
+```
+
+Supported schemes:
+- `mysql`
+- `mysql+mysqlconnector`
+- `mysql+aiomysql`
+- `mysql+asyncmy`
+- `mysql+mysqldb`
+- `mysql+pymysql`
+- `mysql+cymysql`
+- `mysql+pyodbc`
+
+### MariaDBDsn
+
+A type that will accept any MariaDB DSN. User info required, TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, MariaDBDsn
+
+class Model(BaseModel):
+    db: MariaDBDsn
+
+print(Model(db='mariadb://user:pass@localhost:3306/db').db)
+```
+
+Supported schemes:
+- `mariadb`
+- `mariadb+mariadbconnector`
+- `mariadb+pymysql`
+
+### RedisDsn
+
+A type that will accept any Redis DSN. User info required, TLD not required, host required (defaults to `localhost`).
+
+```python
+from pydantic import BaseModel, RedisDsn
+
+class Model(BaseModel):
+    db: RedisDsn
+
+print(Model(db='redis://:pass@localhost').db)
+print(Model(db='rediss://:pass@localhost').db)
+```
+
+Default port: `6379`
+
+Default path: `/0`
+
+### MongoDsn
+
+A type that will accept any MongoDB DSN. User info not required, database name not required, port not required, supports multiple hosts.
+
+```python
+from pydantic import BaseModel, MongoDsn
+
+class Model(BaseModel):
+    db: MongoDsn
+
+print(Model(db='mongodb://localhost').db)
+print(Model(db='mongodb+srv://user:pass@cluster.example.com/db').db)
+```
+
+Supported schemes:
+- `mongodb`
+- `mongodb+srv`
+
+Default port: `27017`
+
+### AmqpDsn
+
+A type that will accept any AMQP DSN. User info required, TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, AmqpDsn
+
+class Model(BaseModel):
+    queue: AmqpDsn
+
+print(Model(queue='amqp://user:pass@localhost:5672/').queue)
+```
+
+Supported schemes:
+- `amqp`
+- `amqps`
+
+### KafkaDsn
+
+A type that will accept any Kafka DSN. User info required, TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, KafkaDsn
+
+class Model(BaseModel):
+    broker: KafkaDsn
+
+print(Model(broker='kafka://localhost').broker)
+```
+
+Default host: `localhost`
+
+Default port: `9092`
+
+### NatsDsn
+
+A type that will accept any NATS DSN. Supports multiple hosts.
+
+```python
+from pydantic import BaseModel, NatsDsn
+
+class Model(BaseModel):
+    broker: NatsDsn
+
+print(Model(broker='nats://localhost').broker)
+```
+
+Supported schemes:
+- `nats`
+- `tls`
+- `ws`
+- `wss`
+
+Default host: `localhost`
+
+Default port: `4222`
+
+### ClickHouseDsn
+
+A type that will accept any ClickHouse DSN. User info required, TLD not required, host not required.
+
+```python
+from pydantic import BaseModel, ClickHouseDsn
+
+class Model(BaseModel):
+    db: ClickHouseDsn
+
+print(Model(db='clickhouse://user:pass@localhost:9000/db').db)
+```
+
+Supported schemes:
+- `clickhouse+native`
+- `clickhouse+asynch`
+- `clickhouse+http`
+- `clickhouse`
+- `clickhouses`
+- `clickhousedb`
+
+Default host: `localhost`
+
+Default port: `9000`
+
+### SnowflakeDsn
+
+A type that will accept any Snowflake DSN. User info required, TLD not required, host required.
+
+```python
+from pydantic import BaseModel, SnowflakeDsn
+
+class Model(BaseModel):
+    db: SnowflakeDsn
+
+print(Model(db='snowflake://user:pass@account.snowflakecomputing.com/db').db)
+```
+
+## Email Types
+
+### EmailStr
+
+Validate email addresses.
+
+<Note>
+To use this type, you need to install the optional `email-validator` package:
+```bash
+pip install email-validator
+```
+</Note>
+
+```python
+from pydantic import BaseModel, EmailStr
+
+class Model(BaseModel):
+    email: EmailStr
+
+print(Model(email='contact@mail.com'))
+# email='contact@mail.com'
+```
+
+### NameEmail
+
+Validate a name and email address combination, as specified by RFC 5322.
+
+<Note>
+To use this type, you need to install the optional `email-validator` package:
+```bash
+pip install email-validator
+```
+</Note>
+
+The `NameEmail` has two properties: `name` and `email`. In case the `name` is not provided, it's inferred from the email address.
+
+```python
+from pydantic import BaseModel, NameEmail
+
+class User(BaseModel):
+    email: NameEmail
+
+user = User(email='Fred Bloggs <fred.bloggs@example.com>')
+print(user.email)
+# Fred Bloggs <fred.bloggs@example.com>
+print(user.email.name)
+# Fred Bloggs
+
+user = User(email='fred.bloggs@example.com')
+print(user.email)
+# fred.bloggs <fred.bloggs@example.com>
+print(user.email.name)
+# fred.bloggs
+```
+
+### validate_email
+
+Email address validation function using `email-validator`.
+
+```python
+from pydantic.networks import validate_email
+
+name, email = validate_email('Fred Bloggs <fred.bloggs@example.com>')
+print(name)  # Fred Bloggs
+print(email)  # fred.bloggs@example.com
+```
+
+Returns a tuple containing:
+1. The local part of the email (or the name for "pretty" email addresses)
+2. The normalized email
+
+<Note>
+- Raw IP address (literal) domain parts are not allowed
+- "John Doe &lt;local_part@domain.com&gt;" style "pretty" email addresses are processed
+- Spaces are stripped from the beginning and end of addresses
+</Note>
+
+## IP Address Types
+
+### IPvAnyAddress
+
+Validate an IPv4 or IPv6 address.
+
+```python
+from pydantic import BaseModel
+from pydantic.networks import IPvAnyAddress
+
+class IpModel(BaseModel):
+    ip: IPvAnyAddress
+
+print(IpModel(ip='127.0.0.1'))
+# ip=IPv4Address('127.0.0.1')
+
+print(IpModel(ip='::1'))
+# ip=IPv6Address('::1')
+```
+
+### IPvAnyInterface
+
+Validate an IPv4 or IPv6 interface.
+
+```python
+from pydantic import BaseModel
+from pydantic.networks import IPvAnyInterface
+
+class Model(BaseModel):
+    interface: IPvAnyInterface
+
+print(Model(interface='192.168.1.1/24'))
+# interface=IPv4Interface('192.168.1.1/24')
+
+print(Model(interface='::1/128'))
+# interface=IPv6Interface('::1/128')
+```
+
+### IPvAnyNetwork
+
+Validate an IPv4 or IPv6 network.
+
+```python
+from pydantic import BaseModel
+from pydantic.networks import IPvAnyNetwork
+
+class Model(BaseModel):
+    network: IPvAnyNetwork
+
+print(Model(network='192.168.1.0/24'))
+# network=IPv4Network('192.168.1.0/24')
+
+print(Model(network='2001:db8::/32'))
+# network=IPv6Network('2001:db8::/32')
+```
+
+## Standard Library IP Types
+
+Pydantic also supports Python's standard library IP types from `ipaddress`:
+
+### IPv4Address
+
+```python
+from ipaddress import IPv4Address
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    ip: IPv4Address
+
+print(Model(ip='192.168.1.1').ip)
+# 192.168.1.1
+```
+
+### IPv6Address
+
+```python
+from ipaddress import IPv6Address
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    ip: IPv6Address
+
+print(Model(ip='::1').ip)
+# ::1
+```
+
+### IPv4Network
+
+```python
+from ipaddress import IPv4Network
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    network: IPv4Network
+
+print(Model(network='192.168.1.0/24').network)
+# 192.168.1.0/24
+```
+
+### IPv6Network
+
+```python
+from ipaddress import IPv6Network
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    network: IPv6Network
+
+print(Model(network='2001:db8::/32').network)
+# 2001:db8::/32
+```
+
+### IPv4Interface
+
+```python
+from ipaddress import IPv4Interface
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    interface: IPv4Interface
+
+print(Model(interface='192.168.1.1/24').interface)
+# 192.168.1.1/24
+```
+
+### IPv6Interface
+
+```python
+from ipaddress import IPv6Interface
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    interface: IPv6Interface
+
+print(Model(interface='::1/128').interface)
+# ::1/128
+```

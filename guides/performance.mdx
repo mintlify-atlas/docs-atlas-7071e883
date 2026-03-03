@@ -1,0 +1,522 @@
+---
+title: Performance Optimization
+description: Tips, benchmarks, and strategies for optimizing Pydantic validation and serialization performance
+---
+
+In most cases, Pydantic won't be your bottleneck. However, when performance is critical, these optimization techniques can make a significant difference.
+
+## Quick Performance Wins
+
+<Steps>
+
+<Step title="Use model_validate_json()">
+  Always prefer `model_validate_json()` over `model_validate(json.loads(...))`
+</Step>
+
+<Step title="Instantiate TypeAdapter once">
+  Create TypeAdapter instances once and reuse them
+</Step>
+
+<Step title="Use specific types">
+  Prefer `list`/`dict` over `Sequence`/`Mapping` when possible
+</Step>
+
+<Step title="Use tagged unions">
+  Replace plain unions with discriminated unions
+</Step>
+
+</Steps>
+
+## JSON Validation Performance
+
+### Use model_validate_json() Instead of json.loads()
+
+**Bad:**
+```python
+import json
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+    email: str
+
+# Slow: two-step process
+json_data = '{"name": "John", "age": 30, "email": "john@example.com"}'
+data = json.loads(json_data)  # Step 1: Parse JSON
+user = User.model_validate(data)  # Step 2: Validate
+```
+
+**Good:**
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+    email: str
+
+# Fast: single-pass validation
+json_data = '{"name": "John", "age": 30, "email": "john@example.com"}'
+user = User.model_validate_json(json_data)
+```
+
+<Tip>
+**Why it's faster:** `model_validate_json()` parses JSON in Rust and validates in a single pass, avoiding the creation of intermediate Python dictionaries.
+</Tip>
+
+### Special Cases for model_validate()
+
+There are a few cases where `model_validate(json.loads(...))` may be faster:
+
+- When using `'before'` or `'wrap'` validators on a model
+- When you need to process the dictionary before validation
+
+These cases are rare and should be benchmarked individually.
+
+## TypeAdapter Optimization
+
+### Instantiate Once, Use Many Times
+
+**Bad:**
+```python
+from pydantic import TypeAdapter
+
+def process_data(json_str: str):
+    # Creates a new adapter every call - SLOW!
+    adapter = TypeAdapter(list[int])
+    return adapter.validate_json(json_str)
+
+# Called many times
+for data in large_dataset:
+    result = process_data(data)
+```
+
+**Good:**
+```python
+from pydantic import TypeAdapter
+
+# Create once at module level
+adapter = TypeAdapter(list[int])
+
+def process_data(json_str: str):
+    # Reuse the same adapter - FAST!
+    return adapter.validate_json(json_str)
+
+# Called many times
+for data in large_dataset:
+    result = process_data(data)
+```
+
+<Warning>
+Each `TypeAdapter` instantiation constructs a new validator and serializer. This is expensive - avoid doing it repeatedly.
+</Warning>
+
+## Type Specificity
+
+### Use Concrete Types Over Abstract Types
+
+**Slower:**
+```python
+from collections.abc import Sequence, Mapping
+from pydantic import BaseModel
+
+class SlowModel(BaseModel):
+    items: Sequence[int]  # Pydantic checks multiple sequence types
+    data: Mapping[str, str]  # Pydantic checks multiple mapping types
+```
+
+**Faster:**
+```python
+from pydantic import BaseModel
+
+class FastModel(BaseModel):
+    items: list[int]  # Direct type check
+    data: dict[str, str]  # Direct type check
+```
+
+**Why it matters:**
+- With `Sequence`, Pydantic must check if the value is a list, tuple, or other sequence types
+- With `list`, Pydantic can directly validate as a list
+- The same principle applies to `Mapping` vs `dict`
+
+## Discriminated Unions (Tagged Unions)
+
+### Avoid Expensive Union Validation
+
+**Slow - Plain Union:**
+```python
+from typing import Union, Literal
+from pydantic import BaseModel, Field
+
+class DivModel(BaseModel):
+    tag: Literal['div'] = 'div'
+    class_name: str | None = None
+    children: list | None = None
+
+class SpanModel(BaseModel):
+    tag: Literal['span'] = 'span'
+    class_name: str | None = None
+    contents: str | None = None
+
+class ButtonModel(BaseModel):
+    tag: Literal['button'] = 'button'
+    class_name: str | None = None
+    contents: str | None = None
+
+class Html(BaseModel):
+    # Pydantic tries each type until one succeeds - SLOW!
+    element: DivModel | SpanModel | ButtonModel
+```
+
+**Fast - Discriminated Union:**
+```python
+from typing import Union, Literal
+from pydantic import BaseModel, Field
+
+class DivModel(BaseModel):
+    tag: Literal['div'] = 'div'
+    class_name: str | None = None
+    children: list | None = None
+
+class SpanModel(BaseModel):
+    tag: Literal['span'] = 'span'
+    class_name: str | None = None
+    contents: str | None = None
+
+class ButtonModel(BaseModel):
+    tag: Literal['button'] = 'button'
+    class_name: str | None = None
+    contents: str | None = None
+
+class Html(BaseModel):
+    # Pydantic checks discriminator first - FAST!
+    element: DivModel | SpanModel | ButtonModel = Field(discriminator='tag')
+```
+
+<Tip>
+**Performance boost:** Discriminated unions can be **significantly faster** (often 2-10x) because Pydantic immediately knows which type to validate based on the discriminator field.
+</Tip>
+
+## TypedDict vs Nested Models
+
+### Use TypedDict for Better Performance
+
+**Benchmark Comparison:**
+```python
+from timeit import timeit
+from typing_extensions import TypedDict
+from pydantic import BaseModel, TypeAdapter
+
+# TypedDict approach
+class AddressDict(TypedDict):
+    street: str
+    city: str
+    zipcode: int
+
+class PersonDict(TypedDict):
+    name: str
+    age: int
+    address: AddressDict
+
+# BaseModel approach
+class AddressModel(BaseModel):
+    street: str
+    city: str
+    zipcode: int
+
+class PersonModel(BaseModel):
+    name: str
+    age: int
+    address: AddressModel
+
+# Benchmark
+data = {
+    'name': 'John',
+    'age': 30,
+    'address': {'street': '123 Main St', 'city': 'Boston', 'zipcode': 12345}
+}
+
+ta = TypeAdapter(PersonDict)
+time_typeddict = timeit(
+    lambda: ta.validate_python(data),
+    number=10000
+)
+
+time_model = timeit(
+    lambda: PersonModel.model_validate(data),
+    number=10000
+)
+
+print(f"TypedDict is {time_model / time_typeddict:.2f}x faster")
+# Output: TypedDict is ~2.5x faster
+```
+
+<Tip>
+**When to use TypedDict:** For nested data structures where you don't need model methods, computed fields, or complex validation logic.
+</Tip>
+
+## Avoid Unnecessary Validation
+
+### Use Any for Pass-Through Data
+
+```python
+from typing import Any
+from pydantic import BaseModel
+
+class Config(BaseModel):
+    # Validated
+    api_key: str
+    timeout: int
+    
+    # Not validated - passes through unchanged
+    custom_settings: Any  # Could be anything
+    metadata: Any  # Skip expensive validation
+
+config = Config(
+    api_key='secret',
+    timeout=30,
+    custom_settings={'complex': 'data', 'with': ['nested', 'structures']},
+    metadata={'anything': 'goes', 'here': 123}
+)
+```
+
+<Warning>
+Use `Any` judiciously. You're giving up type safety and validation for performance.
+</Warning>
+
+## Avoid Wrap Validators
+
+Wrap validators have performance overhead:
+
+**Slower:**
+```python
+from typing import Any, Annotated
+from pydantic import BaseModel, WrapValidator, ValidationInfo, ValidatorFunctionWrapHandler
+
+def expensive_wrap_validator(
+    value: Any,
+    handler: ValidatorFunctionWrapHandler,
+    info: ValidationInfo
+) -> Any:
+    # Must materialize in Python
+    result = handler(value)
+    # Additional processing
+    return result
+
+class Model(BaseModel):
+    data: Annotated[list[int], WrapValidator(expensive_wrap_validator)]
+```
+
+**Faster:**
+```python
+from typing import Annotated
+from pydantic import BaseModel, AfterValidator
+
+def simple_after_validator(value: list[int]) -> list[int]:
+    # Validation already done
+    return value
+
+class Model(BaseModel):
+    data: Annotated[list[int], AfterValidator(simple_after_validator)]
+```
+
+## FailFast for Early Termination
+
+**Available in v2.8+**
+
+Stop validation on first error in sequences:
+
+```python
+from typing import Annotated
+from pydantic import FailFast, TypeAdapter, ValidationError
+
+# Without FailFast - validates all items
+adapter = TypeAdapter(list[int])
+try:
+    adapter.validate_python([1, 'invalid', 2, 'also-invalid', 3])
+except ValidationError as e:
+    print(f"Got {e.error_count()} errors")
+    # Got 2 errors
+
+# With FailFast - stops at first error
+fast_adapter = TypeAdapter(Annotated[list[int], FailFast()])
+try:
+    fast_adapter.validate_python([1, 'invalid', 2, 'also-invalid', 3])
+except ValidationError as e:
+    print(f"Got {e.error_count()} error(s)")
+    # Got 1 error(s)
+```
+
+<Tip>
+**Trade-off:** You get faster validation by stopping early, but you lose visibility into all validation errors.
+</Tip>
+
+## Avoid Extra Information in Primitives
+
+**Don't do this:**
+```python
+class CompletedStr(str):
+    """Subclass of str with extra state - SLOW!"""
+    def __init__(self, s: str):
+        self.s = s
+        self.done = False
+```
+
+**Do this instead:**
+```python
+from pydantic import BaseModel
+
+class CompletedModel(BaseModel):
+    """Proper model with explicit fields - FAST!"""
+    s: str
+    done: bool = False
+```
+
+## Real-World Optimization Example
+
+<Accordion title="Example: Optimizing a Data Pipeline">
+
+```python
+from typing import TypedDict, Annotated
+from pydantic import BaseModel, TypeAdapter, Field, AfterValidator
+from typing import Literal
+
+# BEFORE: Slow implementation
+
+class SlowRecord(BaseModel):
+    # Using abstract types
+    data: dict  # OK, dict is concrete
+    tags: list[str]
+
+class SlowProcessor:
+    def process(self, json_data: str) -> SlowRecord:
+        # Two-step process
+        import json
+        data = json.loads(json_data)
+        return SlowRecord.model_validate(data)
+
+# AFTER: Fast implementation
+
+class FastRecordDict(TypedDict):
+    # Using TypedDict for better performance
+    data: dict[str, str]
+    tags: list[str]
+
+class FastProcessor:
+    def __init__(self):
+        # Instantiate adapter once
+        self.adapter = TypeAdapter(FastRecordDict)
+    
+    def process(self, json_data: str) -> FastRecordDict:
+        # Single-pass JSON validation
+        return self.adapter.validate_json(json_data)
+
+# Additional optimization: Discriminated union for multiple types
+
+class TypeARecord(TypedDict):
+    record_type: Literal['type_a']
+    value: int
+
+class TypeBRecord(TypedDict):
+    record_type: Literal['type_b']
+    description: str
+
+class OptimizedProcessor:
+    def __init__(self):
+        # Union with discriminator
+        RecordUnion = Annotated[
+            TypeARecord | TypeBRecord,
+            Field(discriminator='record_type')
+        ]
+        self.adapter = TypeAdapter(RecordUnion)
+    
+    def process(self, json_data: str):
+        return self.adapter.validate_json(json_data)
+
+# Benchmark
+import timeit
+
+json_data = '{"data": {"key": "value"}, "tags": ["a", "b", "c"]}'
+
+slow = SlowProcessor()
+fast = FastProcessor()
+
+time_slow = timeit.timeit(lambda: slow.process(json_data), number=10000)
+time_fast = timeit.timeit(lambda: fast.process(json_data), number=10000)
+
+print(f"Speedup: {time_slow / time_fast:.2f}x faster")
+# Typical result: 2-3x faster
+```
+
+</Accordion>
+
+## Performance Monitoring
+
+### Benchmark Your Code
+
+```python
+import timeit
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+    email: str
+
+def benchmark_validation():
+    json_data = '{"name": "John", "age": 30, "email": "john@example.com"}'
+    
+    # Time JSON validation
+    time_json = timeit.timeit(
+        lambda: User.model_validate_json(json_data),
+        number=10000
+    )
+    
+    # Time dict validation
+    data = {'name': 'John', 'age': 30, 'email': 'john@example.com'}
+    time_dict = timeit.timeit(
+        lambda: User.model_validate(data),
+        number=10000
+    )
+    
+    print(f"JSON validation: {time_json:.4f}s")
+    print(f"Dict validation: {time_dict:.4f}s")
+    print(f"JSON is {time_dict / time_json:.2f}x faster than dict")
+
+benchmark_validation()
+```
+
+## Summary: Performance Checklist
+
+- [ ] Use `model_validate_json()` for JSON data
+- [ ] Instantiate `TypeAdapter` once and reuse
+- [ ] Use `list`/`dict` instead of `Sequence`/`Mapping`
+- [ ] Use discriminated unions instead of plain unions
+- [ ] Consider `TypedDict` for nested structures
+- [ ] Use `Any` for data that doesn't need validation
+- [ ] Avoid wrap validators unless necessary
+- [ ] Use `FailFast` when appropriate
+- [ ] Benchmark critical paths in your code
+
+## Expected Performance Characteristics
+
+| Operation | Performance |
+|-----------|-------------|
+| `model_validate_json()` | Fastest for JSON input |
+| `model_validate(dict)` | Fast for Python dicts |
+| TypedDict validation | ~2.5x faster than nested models |
+| Discriminated union | 2-10x faster than plain union |
+| Concrete types (`list`/`dict`) | Faster than abstract (`Sequence`/`Mapping`) |
+| After validator | Faster than wrap validator |
+
+<Tip>
+**Rule of thumb:** Start with clear, maintainable code. Only optimize when profiling shows Pydantic is actually a bottleneck.
+</Tip>
+
+## See Also
+
+- [Performance Tips Documentation](/guides/performance)
+- [JSON Handling Guide](/guides/json)
+- [Type Adapter Documentation](/advanced/type-adapter)
+- [Discriminated Unions](/advanced/unions)

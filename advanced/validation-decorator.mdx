@@ -1,0 +1,440 @@
+---
+title: Validation Decorator
+description: Validate function arguments and return values with @validate_call
+---
+
+The `@validate_call` decorator allows you to apply Pydantic validation to function arguments and optionally return values. This is useful for adding runtime type checking and validation to regular functions.
+
+## Overview
+
+The `validate_call` decorator:
+
+- Validates function arguments against their type annotations
+- Optionally validates return values
+- Supports all Pydantic types and validators
+- Works with regular functions, methods, and lambdas
+- Provides clear validation errors
+
+## Basic Usage
+
+Decorate any function to validate its arguments:
+
+```python
+from pydantic import validate_call, ValidationError
+
+@validate_call
+def greet(name: str, age: int) -> str:
+    return f"Hello {name}, you are {age} years old"
+
+# Valid call - types are coerced
+result = greet(name='John', age='30')
+print(result)  # "Hello John, you are 30 years old"
+
+# Invalid call - raises ValidationError
+try:
+    greet(name='John', age='invalid')
+except ValidationError as e:
+    print(e)
+```
+
+## Validation Modes
+
+<Steps>
+
+### Plain Decorator
+
+Use as a simple decorator without arguments:
+
+```python
+from pydantic import validate_call
+
+@validate_call
+def add(a: int, b: int) -> int:
+    return a + b
+
+result = add('5', '10')
+print(result)  # 15 (strings coerced to integers)
+```
+
+### With Configuration
+
+Pass configuration options:
+
+```python
+from pydantic import validate_call, ConfigDict
+
+@validate_call(config=ConfigDict(strict=True))
+def strict_add(a: int, b: int) -> int:
+    return a + b
+
+# Strict mode - no coercion allowed
+try:
+    strict_add('5', 10)
+except ValidationError as e:
+    print("Strict validation failed")
+
+# This works
+result = strict_add(5, 10)
+print(result)  # 15
+```
+
+### Return Value Validation
+
+Validate the function's return value:
+
+```python
+from pydantic import validate_call, ValidationError
+
+@validate_call(validate_return=True)
+def get_age() -> int:
+    return "not an int"  # This will raise ValidationError
+
+try:
+    get_age()
+except ValidationError as e:
+    print(e)
+```
+
+</Steps>
+
+## Working with Complex Types
+
+Validate complex type annotations:
+
+```python
+from typing import List, Dict, Optional
+from pydantic import validate_call
+
+@validate_call
+def process_data(
+    items: List[int],
+    metadata: Dict[str, str],
+    limit: Optional[int] = None
+) -> Dict[str, any]:
+    return {
+        'count': len(items),
+        'metadata': metadata,
+        'limit': limit
+    }
+
+# All arguments validated
+result = process_data(
+    items=['1', '2', '3'],  # Coerced to ints
+    metadata={'key': 'value'},
+    limit='10'  # Coerced to int
+)
+print(result)
+# {'count': 3, 'metadata': {'key': 'value'}, 'limit': 10}
+```
+
+## Field Constraints
+
+Use Field for advanced validation:
+
+```python
+from typing import Annotated
+from pydantic import validate_call, Field, ValidationError
+
+@validate_call
+def create_user(
+    name: Annotated[str, Field(min_length=1, max_length=50)],
+    age: Annotated[int, Field(gt=0, lt=150)],
+    email: Annotated[str, Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')]
+) -> dict:
+    return {'name': name, 'age': age, 'email': email}
+
+# Valid
+user = create_user(
+    name='John Doe',
+    age=30,
+    email='john@example.com'
+)
+print(user)
+
+# Invalid - name too long
+try:
+    create_user(
+        name='x' * 100,
+        age=30,
+        email='john@example.com'
+    )
+except ValidationError as e:
+    print(e)
+```
+
+## Method Validation
+
+Validate class and instance methods:
+
+```python
+from pydantic import validate_call
+
+class Calculator:
+    def __init__(self, precision: int = 2):
+        self.precision = precision
+    
+    @validate_call
+    def divide(self, a: float, b: float) -> float:
+        if b == 0:
+            raise ValueError("Cannot divide by zero")
+        result = a / b
+        return round(result, self.precision)
+
+calc = Calculator(precision=3)
+result = calc.divide('10', '3')  # Strings coerced to floats
+print(result)  # 3.333
+```
+
+## Static and Class Methods
+
+Validate static and class methods:
+
+```python
+from pydantic import validate_call
+
+class MathUtils:
+    
+    @staticmethod
+    @validate_call
+    def add(a: int, b: int) -> int:
+        return a + b
+    
+    @classmethod
+    @validate_call
+    def multiply(cls, a: int, b: int) -> int:
+        return a * b
+
+# Static method
+result = MathUtils.add('5', '10')
+print(result)  # 15
+
+# Class method
+result = MathUtils.multiply('3', '4')
+print(result)  # 12
+```
+
+<Warning>
+  The `@validate_call` decorator must be applied BEFORE `@staticmethod`, `@classmethod`, or `@property` decorators.
+</Warning>
+
+## Default Values
+
+Handle default arguments:
+
+```python
+from typing import Optional
+from pydantic import validate_call
+
+@validate_call
+def greet(
+    name: str,
+    title: Optional[str] = None,
+    greeting: str = "Hello"
+) -> str:
+    if title:
+        return f"{greeting} {title} {name}"
+    return f"{greeting} {name}"
+
+print(greet('Smith'))  # "Hello Smith"
+print(greet('Smith', title='Dr.'))  # "Hello Dr. Smith"
+print(greet('Smith', title='Dr.', greeting='Good morning'))  
+# "Good morning Dr. Smith"
+```
+
+## Variable Arguments
+
+Validate *args and **kwargs:
+
+```python
+from typing import Any
+from pydantic import validate_call
+
+@validate_call
+def sum_numbers(*numbers: int) -> int:
+    return sum(numbers)
+
+result = sum_numbers('1', '2', '3', '4')  # All coerced to ints
+print(result)  # 10
+
+@validate_call
+def create_record(name: str, **attributes: Any) -> dict:
+    return {'name': name, **attributes}
+
+record = create_record(
+    name='John',
+    age='30',  # Kept as string
+    active=True
+)
+print(record)  # {'name': 'John', 'age': '30', 'active': True}
+```
+
+## Custom Validators
+
+Combine with Pydantic types for custom validation:
+
+```python
+from typing import Annotated
+from pydantic import validate_call, BeforeValidator, ValidationError
+
+def normalize_email(v: str) -> str:
+    return v.lower().strip()
+
+@validate_call
+def register_user(
+    email: Annotated[str, BeforeValidator(normalize_email)],
+    username: str
+) -> dict:
+    return {'email': email, 'username': username}
+
+result = register_user(
+    email='  JOHN@EXAMPLE.COM  ',
+    username='john123'
+)
+print(result)
+# {'email': 'john@example.com', 'username': 'john123'}
+```
+
+## Partial Functions
+
+Validate partial functions:
+
+```python
+from functools import partial
+from pydantic import validate_call
+
+@validate_call
+def power(base: float, exponent: float) -> float:
+    return base ** exponent
+
+# Create partial function
+square = partial(power, exponent=2)
+cube = partial(power, exponent=3)
+
+print(square('4'))  # 16.0
+print(cube('2'))    # 8.0
+```
+
+## Lambda Functions
+
+Validate lambda functions:
+
+```python
+from pydantic import validate_call
+
+# Validate lambda
+add = validate_call(lambda x: int, y: int: x + y)
+
+result = add('5', '10')
+print(result)  # 15
+```
+
+## Async Functions
+
+Validate async functions:
+
+```python
+import asyncio
+from pydantic import validate_call
+
+@validate_call
+async def fetch_user(user_id: int) -> dict:
+    # Simulate async operation
+    await asyncio.sleep(0.1)
+    return {'id': user_id, 'name': f'User {user_id}'}
+
+# Use with async
+async def main():
+    user = await fetch_user('123')  # String coerced to int
+    print(user)  # {'id': 123, 'name': 'User 123'}
+
+asyncio.run(main())
+```
+
+## Error Handling
+
+Handle validation errors gracefully:
+
+```python
+from pydantic import validate_call, ValidationError
+
+@validate_call
+def divide(a: float, b: float) -> float:
+    return a / b
+
+try:
+    result = divide('10', 'invalid')
+except ValidationError as e:
+    print("Validation failed:")
+    for error in e.errors():
+        print(f"  - {error['loc']}: {error['msg']}")
+```
+
+## Performance Considerations
+
+<Note>
+  The `@validate_call` decorator adds overhead to function calls. Use it judiciously:
+  - Great for public APIs and user-facing functions
+  - Consider skipping for internal, performance-critical code
+  - The validation schema is built once and cached
+</Note>
+
+## Supported Function Types
+
+The decorator supports:
+
+- ✅ Regular functions
+- ✅ Instance methods
+- ✅ Class methods
+- ✅ Static methods
+- ✅ Async functions
+- ✅ Lambda functions
+- ✅ Partial functions
+- ❌ Built-in functions
+- ❌ Property decorators (must be applied after @validate_call)
+
+## Best Practices
+
+<Accordion title="Type Annotations">
+  Always provide complete type annotations:
+  
+  ```python
+  # Good
+  @validate_call
+  def process(data: List[int]) -> Dict[str, int]:
+      pass
+  
+  # Avoid - no validation possible
+  @validate_call
+  def process(data):
+      pass
+  ```
+</Accordion>
+
+<Accordion title="Decorator Order">
+  Apply `@validate_call` before other decorators:
+  
+  ```python
+  # Correct
+  @staticmethod
+  @validate_call
+  def func(x: int) -> int:
+      pass
+  
+  # Incorrect - will raise error
+  @validate_call
+  @staticmethod
+  def func(x: int) -> int:
+      pass
+  ```
+</Accordion>
+
+<Accordion title="Return Validation">
+  Enable return validation for critical functions:
+  
+  ```python
+  @validate_call(validate_return=True)
+  def get_config() -> Dict[str, str]:
+      # Ensures return type is correct
+      return load_config()
+  ```
+</Accordion>

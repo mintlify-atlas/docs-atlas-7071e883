@@ -1,0 +1,368 @@
+---
+title: Models
+description: Creating and using Pydantic models with BaseModel
+---
+
+Pydantic models are the core component of the library. They provide powerful data validation and serialization capabilities through simple class definitions.
+
+## BaseModel
+
+All Pydantic models inherit from `BaseModel`, which provides the validation and serialization functionality.
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+
+user = User(id=123, name='John Doe', email='john@example.com')
+print(user)
+#> id=123 name='John Doe' email='john@example.com'
+```
+
+## Model Creation
+
+### Basic Model Definition
+
+Define models by creating a class that inherits from `BaseModel` and adding typed fields:
+
+```python
+from pydantic import BaseModel
+from typing import Optional
+
+class Product(BaseModel):
+    id: int
+    name: str
+    price: float
+    description: Optional[str] = None
+    in_stock: bool = True
+
+product = Product(id=1, name='Widget', price=9.99)
+print(product.model_dump())
+#> {'id': 1, 'name': 'Widget', 'price': 9.99, 'description': None, 'in_stock': True}
+```
+
+### Model Initialization
+
+The `__init__` method validates input data and raises `ValidationError` if validation fails:
+
+<ParamField path="data" type="**kwargs">
+  Keyword arguments representing field values
+</ParamField>
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    id: int
+    name: str
+
+try:
+    user = User(id='invalid', name='John')  # id should be int
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for User
+    id
+      Input should be a valid integer [type=int_parsing, input_value='invalid', input_type=str]
+    '''
+```
+
+## Model Inheritance
+
+Models can inherit from other models, inheriting their fields:
+
+```python
+from pydantic import BaseModel
+
+class BaseUser(BaseModel):
+    id: int
+    name: str
+
+class User(BaseUser):
+    email: str
+    is_active: bool = True
+
+user = User(id=1, name='John', email='john@example.com')
+print(user.model_dump())
+#> {'id': 1, 'name': 'John', 'email': 'john@example.com', 'is_active': True}
+```
+
+## Essential Methods
+
+### model_validate
+
+Validate data and create a model instance:
+
+<ParamField path="obj" type="Any" required>
+  The object to validate
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+  Whether to enforce strict type validation
+</ParamField>
+
+<ParamField path="from_attributes" type="bool | None">
+  Whether to extract data from object attributes
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+  Additional context to pass to validators
+</ParamField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+
+# Validate from dict
+user = User.model_validate({'id': 123, 'name': 'John'})
+print(user)
+#> id=123 name='John'
+
+# Validate from object attributes
+class UserObj:
+    def __init__(self):
+        self.id = 456
+        self.name = 'Jane'
+
+user_obj = UserObj()
+user = User.model_validate(user_obj, from_attributes=True)
+print(user)
+#> id=456 name='Jane'
+```
+
+### model_validate_json
+
+Validate JSON data and create a model instance:
+
+<ParamField path="json_data" type="str | bytes | bytearray" required>
+  The JSON data to validate
+</ParamField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+
+json_data = '{"id": 123, "name": "John"}'
+user = User.model_validate_json(json_data)
+print(user)
+#> id=123 name='John'
+```
+
+### model_construct
+
+Create a model instance without validation (for trusted data):
+
+<ParamField path="_fields_set" type="set[str] | None">
+  Set of field names that were explicitly set
+</ParamField>
+
+<ParamField path="values" type="**kwargs">
+  Field values to set
+</ParamField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+
+# Construct without validation (faster, but no type checking)
+user = User.model_construct(id=123, name='John')
+print(user)
+#> id=123 name='John'
+```
+
+<Warning>
+  `model_construct()` bypasses validation. Only use it with trusted, pre-validated data.
+</Warning>
+
+### model_copy
+
+Create a copy of the model:
+
+<ParamField path="update" type="dict[str, Any] | None">
+  Values to update in the copy
+</ParamField>
+
+<ParamField path="deep" type="bool">
+  Whether to make a deep copy. Defaults to `False`
+</ParamField>
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+
+user = User(id=123, name='John')
+
+# Shallow copy
+user_copy = user.model_copy()
+print(user_copy)
+#> id=123 name='John'
+
+# Copy with updates
+user_updated = user.model_copy(update={'name': 'Jane'})
+print(user_updated)
+#> id=123 name='Jane'
+```
+
+## Model Properties
+
+### model_fields
+
+A class property containing field metadata:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    name: str = Field(description='User full name')
+
+for field_name, field_info in User.model_fields.items():
+    print(f'{field_name}: {field_info.annotation}')
+#> id: <class 'int'>
+#> name: <class 'str'>
+```
+
+### model_fields_set
+
+An instance property showing which fields were explicitly set:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str = 'default@example.com'
+
+user = User(id=123, name='John')
+print(user.model_fields_set)
+#> {'id', 'name'}
+```
+
+### model_extra
+
+Access extra fields when `extra='allow'` is configured:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    
+    id: int
+    name: str
+
+user = User(id=123, name='John', age=30, city='NYC')
+print(user.model_extra)
+#> {'age': 30, 'city': 'NYC'}
+```
+
+## Model Post-Initialization
+
+Use `model_post_init` to perform actions after model initialization:
+
+```python
+from typing import Any
+from pydantic import BaseModel
+
+class User(BaseModel):
+    first_name: str
+    last_name: str
+    full_name: str = ''
+    
+    def model_post_init(self, __context: Any) -> None:
+        self.full_name = f'{self.first_name} {self.last_name}'
+
+user = User(first_name='John', last_name='Doe')
+print(user.full_name)
+#> John Doe
+```
+
+## Generic Models
+
+Create generic models using `Generic` from typing:
+
+```python
+from typing import Generic, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar('T')
+
+class Response(BaseModel, Generic[T]):
+    data: T
+    status: int
+
+class User(BaseModel):
+    id: int
+    name: str
+
+# Create typed response
+user_response = Response[User](data=User(id=1, name='John'), status=200)
+print(user_response.model_dump())
+#> {'data': {'id': 1, 'name': 'John'}, 'status': 200}
+```
+
+## Dynamic Model Creation
+
+Create models dynamically using `create_model`:
+
+```python
+from pydantic import BaseModel, create_model, Field
+
+# Create model dynamically
+DynamicUser = create_model(
+    'DynamicUser',
+    id=(int, ...),  # required field
+    name=(str, Field(description='User name')),
+    email=(str, 'default@example.com')  # optional with default
+)
+
+user = DynamicUser(id=123, name='John')
+print(user.model_dump())
+#> {'id': 123, 'name': 'John', 'email': 'default@example.com'}
+```
+
+## Model Rebuild
+
+Rebuild the model schema when forward references can be resolved:
+
+```python
+from __future__ import annotations
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    friends: list[User] = []
+
+# Rebuild to resolve forward references
+User.model_rebuild()
+
+user = User(id=1, friends=[User(id=2), User(id=3)])
+print(len(user.friends))
+#> 2
+```
+
+## Best Practices
+
+<Note>
+  - Use type hints for all fields to enable proper validation
+  - Leverage default values for optional fields
+  - Use `model_construct()` only with trusted data
+  - Override `model_post_init()` for custom initialization logic
+  - Use inheritance to share common fields across models
+</Note>

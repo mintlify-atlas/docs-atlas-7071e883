@@ -1,0 +1,387 @@
+---
+title: Mypy Plugin
+description: Mypy plugin for enhanced type checking with Pydantic models
+---
+
+Pydantic works well with [mypy](http://mypy-lang.org) right out of the box, but also ships with a mypy plugin that adds important Pydantic-specific features for improved type checking.
+
+## Why Use the Plugin?
+
+The Pydantic mypy plugin provides:
+
+- **Typed `__init__` signatures** - Generate accurate `__init__` methods with proper type hints
+- **Typed `model_construct`** - Type check manual model construction without validation
+- **Frozen model support** - Detect attempts to mutate frozen fields
+- **Field default validation** - Ensure default values match field types
+- **Untyped field detection** - Warn about fields without type annotations
+- **Dynamic alias warnings** - Detect issues with dynamically-determined aliases
+
+### Example Without Plugin
+
+Consider this model:
+
+```python
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    age: int
+    first_name = 'John'  # Missing type annotation!
+    last_name: Optional[str] = None
+    signup_ts: Optional[datetime] = None
+    list_of_ints: list[int]
+
+m = Model(age=42, list_of_ints=[1, '2', b'3'])
+print(m.middle_name)  # Not a model field!
+Model()  # Missing required fields
+```
+
+Without the plugin, mypy gives incorrect errors:
+
+```output
+15: error: List item 1 has incompatible type "str"; expected "int"
+15: error: List item 2 has incompatible type "bytes"; expected "int"
+16: error: "Model" has no attribute "middle_name"
+17: error: Missing named argument "age" for "Model"
+17: error: Missing named argument "list_of_ints" for "Model"
+```
+
+With the plugin enabled, you get the **correct** errors:
+
+```output
+9: error: Untyped fields disallowed  [pydantic-field]
+16: error: "Model" has no attribute "middle_name"
+17: error: Missing named argument "age" for "Model"
+17: error: Missing named argument "list_of_ints" for "Model"
+```
+
+<Note>
+The plugin catches the missing type annotation on `first_name` and correctly understands that Pydantic performs data conversion, so it doesn't error on `[1, '2', b'3']`.
+</Note>
+
+## Installation
+
+<Steps>
+
+### Enable the Plugin
+
+Add `pydantic.mypy` to your mypy configuration file:
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+plugins = pydantic.mypy
+```
+
+```toml pyproject.toml
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+```
+
+</CodeGroup>
+
+### For Pydantic v1 Models
+
+If using `pydantic.v1` models, add the v1 plugin:
+
+```toml pyproject.toml
+[tool.mypy]
+plugins = ["pydantic.mypy", "pydantic.v1.mypy"]
+```
+
+</Steps>
+
+## Plugin Capabilities
+
+### Generate `__init__` Signature
+
+The plugin synthesizes a typed `__init__` method based on your model fields:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    username: str
+    email: str | None = None
+    is_active: bool = Field(default=True, alias="active")
+
+# Plugin generates (conceptually):
+# def __init__(
+#     self,
+#     *,
+#     id: int,
+#     username: str,
+#     email: str | None = None,
+#     active: bool = True  # Uses alias if validate_by_name is False
+# ) -> None: ...
+
+# Mypy now correctly type checks:
+User(id=1, username="john")  # ✓ OK
+User(id="1", username="john")  # ✓ OK (Pydantic converts)
+User(username="john")  # ✗ Error: Missing argument "id"
+```
+
+### Generate `model_construct` Signature
+
+The [`model_construct`](~/workspace/source/pydantic/main.py:286) method bypasses validation for performance. The plugin ensures type safety:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    username: str
+
+# Plugin provides typing for model_construct
+user = User.model_construct(id=1, username="john")  # ✓ OK
+user = User.model_construct(id="invalid")  # ✗ Mypy error
+```
+
+<Warning>
+`model_construct` bypasses all validation. Only use it when you're certain the data is valid.
+</Warning>
+
+### Frozen Model Support
+
+Detect mutations of frozen fields:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class ImmutableUser(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    
+    id: int
+    username: str
+
+user = ImmutableUser(id=1, username="john")
+user.username = "jane"  # ✗ Mypy error: Property "username" is read-only
+```
+
+### Field Default Validation
+
+Ensure default values match field types:
+
+```python
+from pydantic import BaseModel, Field
+
+class Product(BaseModel):
+    name: str
+    price: float = Field(default="invalid")  # ✗ Mypy error: Incompatible types
+    quantity: int = Field(default_factory=lambda: "0")  # ✗ Mypy error
+```
+
+### Untyped Field Detection
+
+Warn about fields without annotations:
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    typed_field: int = 1
+    untyped_field = 2  # ✗ Error: Untyped fields disallowed [pydantic-field]
+```
+
+<Note>
+Untyped fields cause runtime errors in Pydantic, so the plugin catches them during type checking.
+</Note>
+
+## Plugin Configuration
+
+Configure plugin behavior in your mypy config file:
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+plugins = pydantic.mypy
+
+follow_imports = silent
+warn_redundant_casts = True
+warn_unused_ignores = True
+disallow_any_generics = True
+no_implicit_reexport = True
+disallow_untyped_defs = True
+
+[pydantic-mypy]
+init_forbid_extra = True
+init_typed = True
+warn_required_dynamic_aliases = True
+```
+
+```toml pyproject.toml
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+
+follow_imports = "silent"
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+no_implicit_reexport = true
+disallow_untyped_defs = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+```
+
+</CodeGroup>
+
+### Configuration Options
+
+#### `init_typed`
+
+By default, Pydantic accepts various input types due to [data conversion](../concepts/models.md#data-conversion):
+
+```python
+class Model(BaseModel):
+    a: int
+
+Model(a='1')  # Valid at runtime - Pydantic converts '1' to 1
+```
+
+The plugin uses `Any` for field types in `__init__` unless:
+- `init_typed = True` is set in plugin config, OR
+- [Strict mode](../concepts/strict_mode.md) is enabled on the model
+
+```toml pyproject.toml
+[tool.pydantic-mypy]
+init_typed = true  # Require exact types in __init__
+```
+
+With `init_typed = True`:
+```python
+Model(a='1')  # ✗ Mypy error: Argument has incompatible type "str"; expected "int"
+```
+
+#### `init_forbid_extra`
+
+By default, Pydantic ignores extra arguments:
+
+```python
+class Model(BaseModel):
+    a: int = 1
+
+Model(a=1, unrelated=2)  # Valid at runtime - 'unrelated' is ignored
+```
+
+The plugin adds `**kwargs: Any` to `__init__` unless:
+- `init_forbid_extra = True` is set in plugin config, OR  
+- `extra = 'forbid'` is set in model config
+
+```toml pyproject.toml
+[tool.pydantic-mypy]
+init_forbid_extra = true  # Disallow extra arguments
+```
+
+With `init_forbid_extra = True`:
+```python
+Model(unrelated=2)  # ✗ Mypy error: Unexpected keyword argument
+```
+
+#### `warn_required_dynamic_aliases`
+
+Warn when using dynamic aliases that mypy cannot type check:
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+
+class Model(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=lambda x: x.upper(),  # Dynamic!
+        populate_by_name=False
+    )
+    
+    my_field: int
+
+# With warn_required_dynamic_aliases=True:
+# ⚠ Warning: Dynamic aliases require populate_by_name=True for type safety
+```
+
+```toml pyproject.toml
+[tool.pydantic-mypy]
+warn_required_dynamic_aliases = true
+```
+
+## Working with Any
+
+Some mypy configurations like `disallow_any_explicit` conflict with the plugin's use of `Any` in synthesized signatures.
+
+To circumvent this, enable both strict options:
+
+```toml pyproject.toml
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+disallow_any_explicit = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true  # No **kwargs: Any
+init_typed = true  # No Any for field types
+```
+
+## Implementation Details
+
+The plugin is implemented in [`pydantic/mypy.py`](~/workspace/source/pydantic/mypy.py:1):
+
+<CodeGroup>
+
+```python Core Classes
+class PydanticPlugin(Plugin):
+    """The Pydantic mypy plugin."""
+    
+    def get_base_class_hook(self, fullname: str):
+        """Update Pydantic model class."""
+        # Returns callback for BaseModel subclasses
+        
+class PydanticPluginConfig:
+    """Plugin configuration holder."""
+    
+    init_forbid_extra: bool
+    init_typed: bool
+    warn_required_dynamic_aliases: bool
+```
+
+```python Field Representation  
+class PydanticModelField:
+    """Represents a Pydantic model field for mypy."""
+    
+    name: str
+    alias: str | None
+    has_default: bool
+    type: Type | None
+    
+    def to_argument(self, ...) -> Argument:
+        """Convert field to mypy Argument."""
+```
+
+</CodeGroup>
+
+Key components from [`pydantic/mypy.py`](~/workspace/source/pydantic/mypy.py:82):
+
+- `BASEMODEL_FULLNAME = 'pydantic.main.BaseModel'` - Identifies Pydantic models
+- `FIELD_FULLNAME = 'pydantic.fields.Field'` - Recognizes Field() calls
+- `PydanticModelTransformer` - Transforms model classes during type checking
+
+## Version Compatibility
+
+The plugin is tested against the latest mypy version. The plugin version is tracked in [`pydantic/mypy.py`](~/workspace/source/pydantic/mypy.py:106):
+
+```python
+__version__ = 2
+```
+
+<Note>
+The plugin version increments when changes require mypy cache invalidation.
+</Note>
+
+## Related Resources
+
+- [Mypy Documentation](https://mypy.readthedocs.io/)
+- [Pydantic Models](../concepts/models.md)
+- [Strict Mode](../concepts/strict_mode.md)
+- [Type Checking Best Practices](../concepts/models.md)

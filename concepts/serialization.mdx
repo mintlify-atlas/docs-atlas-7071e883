@@ -1,0 +1,435 @@
+---
+title: Serialization
+description: Model serialization, field serializers, and custom serialization
+---
+
+Pydantic provides powerful serialization capabilities to convert model instances into dictionaries, JSON, or custom formats.
+
+## model_dump
+
+Convert a model instance to a dictionary:
+
+<ParamField path="mode" type="Literal['json', 'python']" default="python">
+  The serialization mode. Use `'json'` for JSON-serializable output
+</ParamField>
+
+<ParamField path="include" type="set | dict | None">
+  Fields to include in the output
+</ParamField>
+
+<ParamField path="exclude" type="set | dict | None">
+  Fields to exclude from the output
+</ParamField>
+
+<ParamField path="by_alias" type="bool" default="False">
+  Whether to use field aliases
+</ParamField>
+
+<ParamField path="exclude_unset" type="bool" default="False">
+  Whether to exclude fields that were not explicitly set
+</ParamField>
+
+<ParamField path="exclude_defaults" type="bool" default="False">
+  Whether to exclude fields with default values
+</ParamField>
+
+<ParamField path="exclude_none" type="bool" default="False">
+  Whether to exclude fields with None values
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str = Field(alias='emailAddress')
+    age: Optional[int] = None
+    is_active: bool = True
+
+user = User(id=123, name='John Doe', emailAddress='john@example.com')
+
+# Basic dump
+print(user.model_dump())
+#> {'id': 123, 'name': 'John Doe', 'email': 'john@example.com', 'age': None, 'is_active': True}
+
+# Use aliases
+print(user.model_dump(by_alias=True))
+#> {'id': 123, 'name': 'John Doe', 'emailAddress': 'john@example.com', 'age': None, 'is_active': True}
+
+# Exclude None values
+print(user.model_dump(exclude_none=True))
+#> {'id': 123, 'name': 'John Doe', 'email': 'john@example.com', 'is_active': True}
+
+# Exclude unset values
+print(user.model_dump(exclude_unset=True))
+#> {'id': 123, 'name': 'John Doe', 'email': 'john@example.com'}
+```
+
+### Include/Exclude Fields
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+    password: str
+
+user = User(id=123, name='John', email='john@example.com', password='secret')
+
+# Include only specific fields
+print(user.model_dump(include={'id', 'name'}))
+#> {'id': 123, 'name': 'John'}
+
+# Exclude specific fields
+print(user.model_dump(exclude={'password'}))
+#> {'id': 123, 'name': 'John', 'email': 'john@example.com'}
+```
+
+### Nested Include/Exclude
+
+```python
+from pydantic import BaseModel
+from typing import List
+
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str
+
+class User(BaseModel):
+    name: str
+    email: str
+    address: Address
+
+user = User(
+    name='John',
+    email='john@example.com',
+    address={'street': '123 Main St', 'city': 'NYC', 'country': 'USA'}
+)
+
+# Exclude nested fields
+print(user.model_dump(exclude={'address': {'country'}}))
+#> {'name': 'John', 'email': 'john@example.com', 'address': {'street': '123 Main St', 'city': 'NYC'}}
+
+# Include nested fields
+print(user.model_dump(include={'name', 'address': {'city'}}))
+#> {'name': 'John', 'address': {'city': 'NYC'}}
+```
+
+## model_dump_json
+
+Serialize model to JSON string:
+
+<ParamField path="indent" type="int | None">
+  Number of spaces for indentation. `None` for compact output
+</ParamField>
+
+<ParamField path="ensure_ascii" type="bool" default="False">
+  Whether to escape non-ASCII characters
+</ParamField>
+
+```python
+from pydantic import BaseModel
+from datetime import datetime
+
+class Event(BaseModel):
+    name: str
+    timestamp: datetime
+    attendees: int
+
+event = Event(
+    name='Conference',
+    timestamp=datetime(2024, 1, 15, 10, 30),
+    attendees=150
+)
+
+# Compact JSON
+print(event.model_dump_json())
+#> {"name":"Conference","timestamp":"2024-01-15T10:30:00","attendees":150}
+
+# Pretty-printed JSON
+print(event.model_dump_json(indent=2))
+'''
+{
+  "name": "Conference",
+  "timestamp": "2024-01-15T10:30:00",
+  "attendees": 150
+}
+'''
+```
+
+## Field Serializers
+
+Customize how individual fields are serialized:
+
+### Plain Serializer
+
+```python
+from pydantic import BaseModel, field_serializer
+from datetime import datetime
+
+class Event(BaseModel):
+    name: str
+    timestamp: datetime
+    
+    @field_serializer('timestamp')
+    def serialize_timestamp(self, value: datetime) -> int:
+        # Serialize as Unix timestamp
+        return int(value.timestamp())
+
+event = Event(name='Conference', timestamp=datetime(2024, 1, 15, 10, 30))
+print(event.model_dump())
+#> {'name': 'Conference', 'timestamp': 1705318200}
+```
+
+### Wrap Serializer
+
+```python
+from pydantic import BaseModel, field_serializer
+from pydantic_core import SerializerFunctionWrapHandler
+from typing import Any
+
+class User(BaseModel):
+    name: str
+    metadata: dict
+    
+    @field_serializer('metadata', mode='wrap')
+    def serialize_metadata(
+        self,
+        value: dict,
+        handler: SerializerFunctionWrapHandler,
+        info
+    ) -> Any:
+        # Add timestamp to metadata during serialization
+        result = handler(value)
+        if info.mode == 'json':
+            result['serialized_at'] = '2024-01-15T10:30:00'
+        return result
+
+user = User(name='John', metadata={'role': 'admin'})
+print(user.model_dump_json())
+#> {"name":"John","metadata":{"role":"admin","serialized_at":"2024-01-15T10:30:00"}}
+```
+
+### When Used Parameter
+
+Control when a serializer is applied:
+
+```python
+from pydantic import BaseModel, field_serializer
+from typing import Optional
+
+class User(BaseModel):
+    name: str
+    secret: Optional[str] = None
+    
+    @field_serializer('secret', when_used='json')
+    def hide_secret(self, value: str | None) -> str:
+        return '***' if value else ''
+
+user = User(name='John', secret='password123')
+
+# Python mode - shows actual value
+print(user.model_dump())
+#> {'name': 'John', 'secret': 'password123'}
+
+# JSON mode - hides value
+print(user.model_dump_json())
+#> {"name":"John","secret":"***"}
+```
+
+## Model Serializers
+
+Customize serialization of the entire model:
+
+### Plain Model Serializer
+
+```python
+from pydantic import BaseModel, model_serializer
+
+class User(BaseModel):
+    first_name: str
+    last_name: str
+    age: int
+    
+    @model_serializer
+    def serialize_model(self) -> dict:
+        return {
+            'fullName': f'{self.first_name} {self.last_name}',
+            'age': self.age,
+            'isAdult': self.age >= 18
+        }
+
+user = User(first_name='John', last_name='Doe', age=25)
+print(user.model_dump())
+#> {'fullName': 'John Doe', 'age': 25, 'isAdult': True}
+```
+
+### Wrap Model Serializer
+
+```python
+from pydantic import BaseModel, model_serializer
+from pydantic_core import SerializerFunctionWrapHandler
+from typing import Any
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+    
+    @model_serializer(mode='wrap')
+    def serialize_model(
+        self,
+        handler: SerializerFunctionWrapHandler,
+        info
+    ) -> Any:
+        data = handler(self)
+        # Add metadata wrapper in JSON mode
+        if info.mode == 'json':
+            return {
+                'data': data,
+                'type': 'User'
+            }
+        return data
+
+user = User(id=1, name='John', email='john@example.com')
+
+print(user.model_dump())
+#> {'id': 1, 'name': 'John', 'email': 'john@example.com'}
+
+print(user.model_dump_json())
+#> {"data":{"id":1,"name":"John","email":"john@example.com"},"type":"User"}
+```
+
+## Custom Serialization with Annotated
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, PlainSerializer, WrapSerializer
+from datetime import datetime
+
+def serialize_datetime(dt: datetime) -> str:
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+def wrap_list(value: list, handler, info) -> list:
+    result = handler(value)
+    if info.mode == 'json':
+        return {'items': result, 'count': len(result)}
+    return result
+
+CustomDateTime = Annotated[datetime, PlainSerializer(serialize_datetime, return_type=str)]
+CountedList = Annotated[list[int], WrapSerializer(wrap_list)]
+
+class Event(BaseModel):
+    name: str
+    timestamp: CustomDateTime
+    attendee_ids: CountedList
+
+event = Event(
+    name='Conference',
+    timestamp=datetime(2024, 1, 15, 10, 30),
+    attendee_ids=[1, 2, 3, 4, 5]
+)
+
+print(event.model_dump())
+#> {'name': 'Conference', 'timestamp': '2024-01-15 10:30:00', 'attendee_ids': [1, 2, 3, 4, 5]}
+
+print(event.model_dump_json())
+#> {"name":"Conference","timestamp":"2024-01-15 10:30:00","attendee_ids":{"items":[1,2,3,4,5],"count":5}}
+```
+
+## Round-trip Serialization
+
+Ensure serialized data can be deserialized:
+
+```python
+from pydantic import BaseModel
+from datetime import datetime
+
+class Event(BaseModel):
+    name: str
+    timestamp: datetime
+
+event = Event(name='Conference', timestamp=datetime(2024, 1, 15, 10, 30))
+
+# Round-trip mode ensures proper deserialization
+data = event.model_dump(round_trip=True)
+reconstructed = Event.model_validate(data)
+
+print(event == reconstructed)
+#> True
+```
+
+## Serialize as Any
+
+Serialize subclasses using duck-typing:
+
+```python
+from pydantic import BaseModel, SerializeAsAny
+from typing import List
+
+class Pet(BaseModel):
+    name: str
+
+class Dog(Pet):
+    breed: str
+
+class Person(BaseModel):
+    name: str
+    pets: List[SerializeAsAny[Pet]]
+
+person = Person(
+    name='John',
+    pets=[
+        Dog(name='Fido', breed='Labrador'),
+        Pet(name='Whiskers')
+    ]
+)
+
+print(person.model_dump())
+#> {'name': 'John', 'pets': [{'name': 'Fido', 'breed': 'Labrador'}, {'name': 'Whiskers'}]}
+```
+
+## Computed Fields
+
+Include computed values in serialization:
+
+```python
+from pydantic import BaseModel, computed_field
+
+class Rectangle(BaseModel):
+    width: float
+    height: float
+    
+    @computed_field
+    @property
+    def area(self) -> float:
+        return self.width * self.height
+
+rect = Rectangle(width=10, height=5)
+print(rect.model_dump())
+#> {'width': 10.0, 'height': 5.0, 'area': 50.0}
+```
+
+## Best Practices
+
+<Note>
+  - Use `mode='json'` when you need JSON-serializable output
+  - Use `exclude_none=True` to omit null values from API responses
+  - Use `exclude_unset=True` for partial updates
+  - Use field serializers for consistent formatting
+  - Use model serializers for complete output transformation
+  - Test round-trip serialization for data integrity
+</Note>
+
+<Warning>
+  Be careful with custom serializers:
+  - Ensure they return the correct type
+  - Consider both JSON and Python modes
+  - Don't modify the original value in place
+  - Handle None values appropriately
+</Warning>

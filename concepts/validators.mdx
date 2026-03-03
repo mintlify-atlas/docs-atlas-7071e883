@@ -1,0 +1,401 @@
+---
+title: Validators
+description: Field validators, model validators, and validation modes
+---
+
+Pydantic provides powerful validation capabilities through decorators that allow you to add custom validation logic to your models.
+
+## Field Validators
+
+Field validators allow you to add custom validation logic to specific fields using the `@field_validator` decorator.
+
+### Basic Field Validator
+
+```python
+from pydantic import BaseModel, field_validator, ValidationError
+
+class User(BaseModel):
+    username: str
+    email: str
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if len(v) < 3:
+            raise ValueError('must be at least 3 characters')
+        if not v.isalnum():
+            raise ValueError('must be alphanumeric')
+        return v
+
+user = User(username='john123', email='john@example.com')
+print(user.username)
+#> john123
+
+try:
+    User(username='ab', email='john@example.com')
+except ValidationError as e:
+    print(e)
+```
+
+### Multiple Fields
+
+Validate multiple fields with a single validator:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class Product(BaseModel):
+    name: str
+    description: str
+    
+    @field_validator('name', 'description')
+    @classmethod
+    def validate_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('must not be empty')
+        return v.strip()
+
+product = Product(name='  Widget  ', description='  A useful widget  ')
+print(product.name)
+#> Widget
+print(product.description)
+#> A useful widget
+```
+
+## Validation Modes
+
+### After Validator (default)
+
+Runs after Pydantic's standard validation:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class User(BaseModel):
+    age: int
+    
+    @field_validator('age', mode='after')
+    @classmethod
+    def validate_age(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError('age cannot be negative')
+        if v > 120:
+            raise ValueError('age seems unrealistic')
+        return v
+
+user = User(age=25)
+print(user.age)
+#> 25
+```
+
+### Before Validator
+
+Runs before Pydantic's standard validation, receives raw input:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class Product(BaseModel):
+    price: float
+    
+    @field_validator('price', mode='before')
+    @classmethod
+    def parse_price(cls, v):
+        # Handle string prices like "$19.99"
+        if isinstance(v, str):
+            return float(v.replace('$', '').replace(',', ''))
+        return v
+
+product = Product(price='$1,234.56')
+print(product.price)
+#> 1234.56
+```
+
+### Wrap Validator
+
+Wraps Pydantic's validation, giving full control:
+
+```python
+from pydantic import BaseModel, field_validator, ValidationError
+from pydantic_core import ValidationInfo
+from typing import Any
+
+class Config(BaseModel):
+    port: int
+    
+    @field_validator('port', mode='wrap')
+    @classmethod
+    def validate_port(cls, v: Any, handler, info: ValidationInfo) -> int:
+        if v == 'default':
+            return 8080
+        try:
+            port = handler(v)
+            if port < 1024:
+                raise ValueError('ports below 1024 require elevated privileges')
+            return port
+        except ValidationError:
+            return 8080  # Default fallback
+
+config1 = Config(port='default')
+print(config1.port)
+#> 8080
+
+config2 = Config(port=3000)
+print(config2.port)
+#> 3000
+```
+
+### Plain Validator
+
+Completely replaces Pydantic's validation:
+
+```python
+from pydantic import BaseModel, field_validator
+from typing import Any
+
+class HexColor(BaseModel):
+    color: str
+    
+    @field_validator('color', mode='plain')
+    @classmethod
+    def validate_hex_color(cls, v: Any) -> str:
+        if isinstance(v, str):
+            v = v.strip('#')
+        if not isinstance(v, str) or len(v) != 6:
+            raise ValueError('must be 6-character hex code')
+        try:
+            int(v, 16)
+        except ValueError:
+            raise ValueError('must be valid hex')
+        return f'#{v.upper()}'
+
+color = HexColor(color='ff5733')
+print(color.color)
+#> #FF5733
+```
+
+## Model Validators
+
+Model validators validate the entire model, not just individual fields.
+
+### After Model Validator
+
+Validate after all fields are parsed:
+
+```python
+from pydantic import BaseModel, model_validator
+from typing_extensions import Self
+
+class DateRange(BaseModel):
+    start_date: str
+    end_date: str
+    
+    @model_validator(mode='after')
+    def validate_date_range(self) -> Self:
+        if self.start_date > self.end_date:
+            raise ValueError('start_date must be before end_date')
+        return self
+
+date_range = DateRange(start_date='2024-01-01', end_date='2024-12-31')
+print(date_range)
+
+try:
+    DateRange(start_date='2024-12-31', end_date='2024-01-01')
+except ValidationError as e:
+    print(e)
+```
+
+### Before Model Validator
+
+Transform raw input data before validation:
+
+```python
+from pydantic import BaseModel, model_validator
+from typing import Any
+
+class User(BaseModel):
+    first_name: str
+    last_name: str
+    
+    @model_validator(mode='before')
+    @classmethod
+    def extract_name(cls, data: Any) -> Any:
+        # Handle full_name input
+        if isinstance(data, dict) and 'full_name' in data:
+            parts = data['full_name'].split(' ', 1)
+            data['first_name'] = parts[0]
+            data['last_name'] = parts[1] if len(parts) > 1 else ''
+            del data['full_name']
+        return data
+
+user1 = User(first_name='John', last_name='Doe')
+user2 = User(full_name='Jane Smith')  # type: ignore
+
+print(user1.first_name, user1.last_name)
+#> John Doe
+print(user2.first_name, user2.last_name)
+#> Jane Smith
+```
+
+### Wrap Model Validator
+
+Wrap the entire validation process:
+
+```python
+from pydantic import BaseModel, model_validator, ValidationError
+from typing import Any
+
+class ResilientModel(BaseModel):
+    value: int
+    
+    @model_validator(mode='wrap')
+    @classmethod
+    def handle_errors(cls, data: Any, handler, info):
+        try:
+            return handler(data)
+        except ValidationError as e:
+            # Return model with default value on error
+            print(f'Validation failed: {e}')
+            return cls.model_construct(value=0)
+
+model1 = ResilientModel(value=42)
+print(model1.value)
+#> 42
+
+model2 = ResilientModel(value='invalid')  # type: ignore
+print(model2.value)
+#> 0
+```
+
+## Validator Context
+
+Access validation context in validators:
+
+```python
+from pydantic import BaseModel, field_validator, ValidationInfo
+
+class User(BaseModel):
+    username: str
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str, info: ValidationInfo) -> str:
+        # Access context passed during validation
+        if info.context:
+            min_length = info.context.get('min_username_length', 3)
+            if len(v) < min_length:
+                raise ValueError(f'must be at least {min_length} characters')
+        return v
+
+# Pass context during validation
+user = User.model_validate(
+    {'username': 'ab'},
+    context={'min_username_length': 5}
+)
+```
+
+## Reusing Validators
+
+Create reusable validators with `Annotated`:
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, BeforeValidator, AfterValidator
+
+def strip_whitespace(v: str) -> str:
+    return v.strip()
+
+def uppercase(v: str) -> str:
+    return v.upper()
+
+def validate_not_empty(v: str) -> str:
+    if not v:
+        raise ValueError('must not be empty')
+    return v
+
+# Create reusable type
+CleanedString = Annotated[
+    str,
+    BeforeValidator(strip_whitespace),
+    AfterValidator(validate_not_empty),
+    AfterValidator(uppercase)
+]
+
+class User(BaseModel):
+    username: CleanedString
+    display_name: CleanedString
+
+user = User(username='  john  ', display_name='  John Doe  ')
+print(user.username)
+#> JOHN
+print(user.display_name)
+#> JOHN DOE
+```
+
+## Field Validation Order
+
+Validators run in this order:
+1. Before validators
+2. Pydantic's standard validation
+3. After validators
+
+```python
+from pydantic import BaseModel, field_validator
+
+class Example(BaseModel):
+    value: int
+    
+    @field_validator('value', mode='before')
+    @classmethod
+    def before_validation(cls, v):
+        print(f'Before: {v} ({type(v).__name__})')
+        return v
+    
+    @field_validator('value', mode='after')
+    @classmethod
+    def after_validation(cls, v: int) -> int:
+        print(f'After: {v} ({type(v).__name__})')
+        return v
+
+example = Example(value='42')
+# Output:
+# Before: 42 (str)
+# After: 42 (int)
+```
+
+## Check Fields Parameter
+
+Ensure field names are valid:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class User(BaseModel):
+    username: str
+    
+    @field_validator('username', 'email', check_fields=True)  # Fails at model definition
+    @classmethod
+    def validate_fields(cls, v: str) -> str:
+        return v
+# PydanticUserError: field 'email' does not exist
+```
+
+## Best Practices
+
+<Note>
+  - Use `mode='after'` for most validation logic
+  - Use `mode='before'` to transform input data
+  - Use `mode='wrap'` when you need full control
+  - Always use `@classmethod` decorator with validators
+  - Raise `ValueError` for validation errors
+  - Return the validated value from validators
+  - Use model validators for cross-field validation
+</Note>
+
+<Warning>
+  Common mistakes:
+  - Forgetting the `@classmethod` decorator
+  - Not returning the value from the validator
+  - Using instance methods instead of class methods
+  - Modifying mutable arguments in place
+</Warning>

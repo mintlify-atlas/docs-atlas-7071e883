@@ -1,0 +1,391 @@
+---
+title: JSON Schema
+description: Generating and customizing JSON schemas from Pydantic models
+---
+
+Pydantic can generate JSON schemas from your models, which is useful for documentation, API specifications, and validation in other systems.
+
+## Generating JSON Schema
+
+### model_json_schema
+
+Generate a JSON schema for a model:
+
+<ParamField path="by_alias" type="bool" default="True">
+  Whether to use field aliases in the schema
+</ParamField>
+
+<ParamField path="ref_template" type="str" default="#/$defs/{model}">
+  Template for generating reference names
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateJsonSchema]">
+  Custom schema generator class
+</ParamField>
+
+<ParamField path="mode" type="Literal['validation', 'serialization']" default="validation">
+  Whether to generate schema for validation or serialization
+</ParamField>
+
+```python
+from pydantic import BaseModel, Field
+import json
+
+class User(BaseModel):
+    id: int = Field(description='Unique identifier')
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    age: int = Field(ge=0, le=120)
+
+schema = User.model_json_schema()
+print(json.dumps(schema, indent=2))
+'''
+{
+  "properties": {
+    "id": {
+      "description": "Unique identifier",
+      "title": "Id",
+      "type": "integer"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "email": {
+      "pattern": "^[\\w\\.-]+@[\\w\\.-]+\\.\\w+$",
+      "title": "Email",
+      "type": "string"
+    },
+    "age": {
+      "maximum": 120,
+      "minimum": 0,
+      "title": "Age",
+      "type": "integer"
+    }
+  },
+  "required": ["id", "name", "email", "age"],
+  "title": "User",
+  "type": "object"
+}
+'''
+```
+
+## Validation vs Serialization Mode
+
+```python
+from pydantic import BaseModel, computed_field
+
+class Product(BaseModel):
+    name: str
+    price: float
+    
+    @computed_field
+    @property
+    def display_price(self) -> str:
+        return f'${self.price:.2f}'
+
+# Validation schema (for input)
+validation_schema = Product.model_json_schema(mode='validation')
+print('Validation required:', validation_schema['required'])
+#> Validation required: ['name', 'price']
+
+# Serialization schema (for output)
+serialization_schema = Product.model_json_schema(mode='serialization')
+print('Serialization required:', serialization_schema['required'])
+#> Serialization required: ['name', 'price', 'display_price']
+```
+
+## Nested Models
+
+JSON schemas for nested models include definitions:
+
+```python
+from pydantic import BaseModel
+from typing import List
+import json
+
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str
+
+class User(BaseModel):
+    name: str
+    addresses: List[Address]
+
+schema = User.model_json_schema()
+print(json.dumps(schema, indent=2))
+'''
+{
+  "$defs": {
+    "Address": {
+      "properties": {
+        "street": {"title": "Street", "type": "string"},
+        "city": {"title": "City", "type": "string"},
+        "country": {"title": "Country", "type": "string"}
+      },
+      "required": ["street", "city", "country"],
+      "title": "Address",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "name": {"title": "Name", "type": "string"},
+    "addresses": {
+      "items": {"$ref": "#/$defs/Address"},
+      "title": "Addresses",
+      "type": "array"
+    }
+  },
+  "required": ["name", "addresses"],
+  "title": "User",
+  "type": "object"
+}
+'''
+```
+
+## Customizing Schema with Field
+
+```python
+from pydantic import BaseModel, Field
+import json
+
+class Product(BaseModel):
+    id: int = Field(
+        description='Product unique identifier',
+        examples=[1, 42, 100]
+    )
+    name: str = Field(
+        title='Product Name',
+        description='The name of the product',
+        min_length=1
+    )
+    price: float = Field(
+        description='Product price in USD',
+        gt=0,
+        examples=[9.99, 19.99, 99.99]
+    )
+
+schema = Product.model_json_schema()
+print(json.dumps(schema['properties']['name'], indent=2))
+'''
+{
+  "description": "The name of the product",
+  "minLength": 1,
+  "title": "Product Name",
+  "type": "string"
+}
+'''
+```
+
+## json_schema_extra
+
+Add custom properties to the JSON schema:
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+import json
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'name': 'John Doe',
+                    'email': 'john@example.com'
+                }
+            ]
+        }
+    )
+    
+    name: str
+    email: str = Field(
+        json_schema_extra={
+            'format': 'email',
+            'example': 'user@example.com'
+        }
+    )
+
+schema = User.model_json_schema()
+print(json.dumps(schema, indent=2))
+```
+
+### Dynamic json_schema_extra
+
+```python
+from pydantic import BaseModel, ConfigDict
+from typing import Dict, Any
+
+def schema_extra(schema: Dict[str, Any], model_class: type) -> None:
+    # Modify schema dynamically
+    schema['title'] = f'{model_class.__name__} Model'
+    schema['x-custom-property'] = 'custom-value'
+
+class User(BaseModel):
+    model_config = ConfigDict(json_schema_extra=schema_extra)
+    
+    name: str
+    email: str
+
+schema = User.model_json_schema()
+print(schema['title'])
+#> User Model
+print(schema['x-custom-property'])
+#> custom-value
+```
+
+## Customizing GenerateJsonSchema
+
+```python
+from pydantic import BaseModel
+from pydantic.json_schema import GenerateJsonSchema, JsonSchemaValue
+from pydantic_core import core_schema
+import json
+
+class CustomGenerateJsonSchema(GenerateJsonSchema):
+    def generate_field_title(self, name: str) -> str:
+        # Custom title generation
+        return name.replace('_', ' ').title()
+    
+    def field_title_should_be_set(self, schema: core_schema.CoreSchema) -> bool:
+        # Always set field titles
+        return True
+
+class User(BaseModel):
+    first_name: str
+    last_name: str
+    email_address: str
+
+schema = User.model_json_schema(schema_generator=CustomGenerateJsonSchema)
+print(json.dumps(schema['properties'], indent=2))
+'''
+{
+  "first_name": {
+    "title": "First Name",
+    "type": "string"
+  },
+  "last_name": {
+    "title": "Last Name",
+    "type": "string"
+  },
+  "email_address": {
+    "title": "Email Address",
+    "type": "string"
+  }
+}
+'''
+```
+
+## Field Aliases in Schema
+
+```python
+from pydantic import BaseModel, Field
+import json
+
+class User(BaseModel):
+    user_id: int = Field(alias='id')
+    user_name: str = Field(alias='name')
+
+# Schema with aliases
+schema_with_alias = User.model_json_schema(by_alias=True)
+print(json.dumps(schema_with_alias['properties'], indent=2))
+'''
+{
+  "id": {"title": "Id", "type": "integer"},
+  "name": {"title": "Name", "type": "string"}
+}
+'''
+
+# Schema without aliases
+schema_without_alias = User.model_json_schema(by_alias=False)
+print(json.dumps(schema_without_alias['properties'], indent=2))
+'''
+{
+  "user_id": {"title": "User Id", "type": "integer"},
+  "user_name": {"title": "User Name", "type": "string"}
+}
+'''
+```
+
+## Discriminated Unions
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+import json
+
+class Cat(BaseModel):
+    pet_type: Literal['cat']
+    meows: int
+
+class Dog(BaseModel):
+    pet_type: Literal['dog']
+    barks: int
+
+class Pet(BaseModel):
+    animal: Union[Cat, Dog] = Field(discriminator='pet_type')
+
+schema = Pet.model_json_schema()
+print(json.dumps(schema, indent=2))
+```
+
+## OpenAPI Integration
+
+Pydantic schemas work seamlessly with OpenAPI:
+
+```python
+from pydantic import BaseModel, Field
+from typing import List, Optional
+import json
+
+class User(BaseModel):
+    '''User model for API documentation'''
+    id: int = Field(description='User ID', examples=[1, 2, 3])
+    name: str = Field(description='User full name', min_length=1)
+    email: str = Field(description='User email address')
+    tags: Optional[List[str]] = Field(default=None, description='User tags')
+
+schema = User.model_json_schema()
+schema['description'] = User.__doc__
+print(json.dumps(schema, indent=2))
+```
+
+## TypeAdapter for Non-Model Types
+
+```python
+from pydantic import TypeAdapter
+from typing import List
+import json
+
+# Generate schema for list of integers
+ta = TypeAdapter(List[int])
+schema = ta.json_schema()
+print(json.dumps(schema, indent=2))
+'''
+{
+  "items": {"type": "integer"},
+  "type": "array"
+}
+'''
+```
+
+## Best Practices
+
+<Note>
+  - Use descriptive field titles and descriptions for better documentation
+  - Provide examples to help users understand expected values
+  - Use `mode='serialization'` for output schemas in API documentation
+  - Leverage `json_schema_extra` for OpenAPI-specific properties
+  - Create custom schema generators for consistent formatting
+  - Use discriminated unions for polymorphic types
+</Note>
+
+<Warning>
+  Common issues:
+  - Generated schemas may be verbose for deeply nested models
+  - Custom types may require custom schema generation
+  - Circular references need careful handling
+  - Some validation constraints don't translate directly to JSON Schema
+</Warning>

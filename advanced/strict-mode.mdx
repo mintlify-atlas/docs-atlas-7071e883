@@ -1,0 +1,523 @@
+---
+title: Strict Mode
+description: Strict validation and type checking in Pydantic
+---
+
+Strict mode in Pydantic disables type coercion and enforces exact type matching. This is useful when you need strict type validation without any implicit conversions.
+
+## Overview
+
+By default, Pydantic operates in "lax" mode, automatically coercing compatible types. In strict mode:
+
+- No type coercion occurs
+- Values must match the exact type specified
+- Validation is more strict but type-safe
+- Useful for APIs and data integrity scenarios
+
+## Global Strict Mode
+
+Enable strict mode for an entire model:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    name: str
+    age: int
+    score: float
+
+# This works - exact types
+model = StrictModel(name='John', age=30, score=95.5)
+print(model)
+# StrictModel(name='John', age=30, score=95.5)
+
+# This fails - no coercion from string to int
+try:
+    StrictModel(name='John', age='30', score=95.5)
+except ValidationError as e:
+    print(e)
+    # Input should be a valid integer
+```
+
+## Field-Level Strict Mode
+
+Apply strict mode to specific fields:
+
+```python
+from pydantic import BaseModel, Field
+
+class MixedModel(BaseModel):
+    # Lax validation - allows coercion
+    name: str
+    
+    # Strict validation - no coercion
+    age: int = Field(strict=True)
+    
+    # Lax validation
+    score: float
+
+# name and score are coerced, age must be exact
+model = MixedModel(
+    name='John',
+    age=30,           # Must be int, not str
+    score='95.5'      # Can be string (coerced)
+)
+print(model)
+
+# This fails - age must be exact int
+try:
+    MixedModel(name='John', age='30', score=95.5)
+except ValidationError as e:
+    print(e)
+```
+
+## Strict Types
+
+Pydantic provides strict type variants:
+
+<CodeGroup>
+
+```python StrictInt
+from pydantic import BaseModel, StrictInt, ValidationError
+
+class Model(BaseModel):
+    strict_int: StrictInt
+
+# Valid
+model = Model(strict_int=42)
+print(model.strict_int)  # 42
+
+# Invalid - no coercion from float
+try:
+    Model(strict_int=3.14)
+except ValidationError as e:
+    print(e)
+    # Input should be a valid integer
+
+# Invalid - no coercion from string  
+try:
+    Model(strict_int='42')
+except ValidationError as e:
+    print(e)
+```
+
+```python StrictFloat
+from pydantic import BaseModel, StrictFloat, ValidationError
+
+class Model(BaseModel):
+    strict_float: StrictFloat
+
+# Valid
+model = Model(strict_float=3.14)
+print(model.strict_float)  # 3.14
+
+# Invalid - no coercion from int
+try:
+    Model(strict_float=42)
+except ValidationError as e:
+    print(e)
+
+# Invalid - no coercion from string
+try:
+    Model(strict_float='3.14')
+except ValidationError as e:
+    print(e)
+```
+
+```python StrictStr
+from pydantic import BaseModel, StrictStr, ValidationError
+
+class Model(BaseModel):
+    strict_str: StrictStr
+
+# Valid
+model = Model(strict_str='hello')
+print(model.strict_str)  # 'hello'
+
+# Invalid - no coercion from int
+try:
+    Model(strict_str=42)
+except ValidationError as e:
+    print(e)
+    # Input should be a valid string
+
+# Invalid - no coercion from bytes
+try:
+    Model(strict_str=b'hello')
+except ValidationError as e:
+    print(e)
+```
+
+```python StrictBool
+from pydantic import BaseModel, StrictBool, ValidationError
+
+class Model(BaseModel):
+    strict_bool: StrictBool
+
+# Valid
+model = Model(strict_bool=True)
+print(model.strict_bool)  # True
+
+# Invalid - no coercion from int
+try:
+    Model(strict_bool=1)
+except ValidationError as e:
+    print(e)
+    # Input should be a valid boolean
+
+# Invalid - no coercion from string
+try:
+    Model(strict_bool='true')
+except ValidationError as e:
+    print(e)
+```
+
+```python StrictBytes
+from pydantic import BaseModel, StrictBytes, ValidationError
+
+class Model(BaseModel):
+    strict_bytes: StrictBytes
+
+# Valid
+model = Model(strict_bytes=b'hello')
+print(model.strict_bytes)  # b'hello'
+
+# Invalid - no coercion from string
+try:
+    Model(strict_bytes='hello')
+except ValidationError as e:
+    print(e)
+    # Input should be a valid bytes
+```
+
+</CodeGroup>
+
+## Using Annotated with Strict
+
+Create custom strict types:
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, Strict, ValidationError
+
+# Define custom strict types
+StrictPositiveInt = Annotated[int, Strict(), Field(gt=0)]
+StrictEmail = Annotated[str, Strict(), Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')]
+
+class User(BaseModel):
+    age: StrictPositiveInt
+    email: StrictEmail
+
+# Valid
+user = User(age=25, email='user@example.com')
+print(user)
+
+# Invalid - strict int required
+try:
+    User(age='25', email='user@example.com')
+except ValidationError as e:
+    print(e)
+```
+
+## Strict Mode with TypeAdapter
+
+Use strict mode with TypeAdapter:
+
+```python
+from pydantic import TypeAdapter, ConfigDict, ValidationError
+from typing import List
+
+# Strict TypeAdapter
+ta = TypeAdapter(
+    List[int],
+    config=ConfigDict(strict=True)
+)
+
+# Valid - all exact ints
+result = ta.validate_python([1, 2, 3])
+print(result)  # [1, 2, 3]
+
+# Invalid - strict mode, no coercion
+try:
+    ta.validate_python(['1', '2', '3'])
+except ValidationError as e:
+    print(e)
+```
+
+## Runtime Strict Mode
+
+Toggle strict mode at validation time:
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: int
+
+# Lax validation (default)
+model = Model.model_validate({'value': '123'})
+print(model.value)  # 123
+
+# Strict validation at runtime
+try:
+    Model.model_validate({'value': '123'}, strict=True)
+except ValidationError as e:
+    print("Strict mode validation failed")
+
+# This works with strict mode
+model = Model.model_validate({'value': 123}, strict=True)
+print(model.value)  # 123
+```
+
+## Partial Strict Mode
+
+Mix strict and lax validation strategically:
+
+```python
+from pydantic import BaseModel, StrictInt, Field
+from typing import Optional
+
+class ApiRequest(BaseModel):
+    # IDs must be exact integers (from route params)
+    user_id: StrictInt
+    
+    # Counts must be exact (from query params)
+    limit: int = Field(default=10, strict=True)
+    
+    # Search can be coerced (user input)
+    search: Optional[str] = None
+    
+    # Flags can be coerced (checkboxes)
+    active: bool = True
+
+request = ApiRequest(
+    user_id=123,        # Must be int
+    limit=50,           # Must be int
+    search='  test  ',  # Can be any string
+    active='true'       # Coerced to bool
+)
+print(request)
+```
+
+## Collection Strict Mode
+
+Strict validation for collections:
+
+```python
+from typing import List, Dict
+from pydantic import BaseModel, StrictInt, StrictStr
+
+class StrictCollections(BaseModel):
+    # All items must be strict ints
+    ids: List[StrictInt]
+    
+    # Keys and values must be strict strings
+    metadata: Dict[StrictStr, StrictStr]
+
+# Valid
+data = StrictCollections(
+    ids=[1, 2, 3],
+    metadata={'key': 'value', 'name': 'test'}
+)
+
+# Invalid - can't coerce strings to ints
+try:
+    StrictCollections(
+        ids=['1', '2', '3'],
+        metadata={'key': 'value'}
+    )
+except ValidationError as e:
+    print(e)
+```
+
+## Numeric Strict Types
+
+Strict numeric validation:
+
+```python
+from pydantic import BaseModel, StrictInt, StrictFloat
+from decimal import Decimal
+
+class Numbers(BaseModel):
+    count: StrictInt
+    price: StrictFloat
+    # Decimal requires exact Decimal type in strict mode
+    amount: Decimal
+
+# In strict mode, types must match exactly
+from pydantic import ConfigDict
+
+class StrictNumbers(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    count: int
+    price: float
+    amount: Decimal
+
+# Valid - exact types
+data = StrictNumbers(
+    count=10,
+    price=19.99,
+    amount=Decimal('100.50')
+)
+
+# Invalid - int instead of float
+try:
+    StrictNumbers(
+        count=10,
+        price=19,  # int, not float
+        amount=Decimal('100.50')
+    )
+except ValidationError as e:
+    print(e)
+```
+
+## Boolean Strict Validation
+
+Strict boolean handling:
+
+```python
+from pydantic import BaseModel, StrictBool, ValidationError
+
+class Settings(BaseModel):
+    enabled: StrictBool
+
+# Only True/False allowed
+Settings(enabled=True)   # ✓ Valid
+Settings(enabled=False)  # ✓ Valid
+
+# These all fail in strict mode:
+try:
+    Settings(enabled=1)      # ✗ int
+except ValidationError:
+    pass
+
+try:
+    Settings(enabled='true') # ✗ string
+except ValidationError:
+    pass
+
+try:
+    Settings(enabled='yes')  # ✗ string
+except ValidationError:
+    pass
+```
+
+## Strict Mode in Dataclasses
+
+Apply strict mode to dataclasses:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import ConfigDict, ValidationError
+
+@dataclass(config=ConfigDict(strict=True))
+class StrictData:
+    name: str
+    age: int
+    score: float
+
+# Valid - exact types
+data = StrictData(name='John', age=30, score=95.5)
+
+# Invalid - no coercion
+try:
+    StrictData(name='John', age='30', score=95.5)
+except ValidationError as e:
+    print(e)
+```
+
+## When to Use Strict Mode
+
+<Steps>
+
+### API Endpoints
+
+Use strict mode for API route parameters:
+
+```python
+from pydantic import BaseModel, StrictInt
+
+class UserQuery(BaseModel):
+    user_id: StrictInt  # From URL path
+    page: StrictInt     # From query param
+    
+# Ensures IDs are actual integers, not strings
+```
+
+### Database IDs
+
+Prevent ID coercion issues:
+
+```python
+from pydantic import BaseModel, StrictInt
+
+class Record(BaseModel):
+    id: StrictInt  # Database primary key
+    foreign_id: StrictInt  # Foreign key reference
+```
+
+### Type Safety
+
+Enforce type safety in critical code:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class CriticalData(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    # All fields require exact types
+    transaction_id: int
+    amount: float
+    verified: bool
+```
+
+</Steps>
+
+## Lax vs Strict Comparison
+
+| Feature | Lax Mode | Strict Mode |
+|---------|----------|-------------|
+| String → Int | `'123'` → `123` ✓ | ✗ Validation Error |
+| Float → Int | `3.0` → `3` ✓ | ✗ Validation Error |
+| Int → Float | `42` → `42.0` ✓ | ✗ Validation Error |
+| Int → Bool | `1` → `True` ✓ | ✗ Validation Error |
+| String → Bool | `'true'` → `True` ✓ | ✗ Validation Error |
+| Bytes → String | `b'hi'` → `'hi'` ✓ | ✗ Validation Error |
+| Performance | Slower (coercion) | Faster (exact match) |
+
+## Best Practices
+
+<Accordion title="Mixing Modes">
+  Use strict mode where data integrity matters, lax mode for user input:
+  
+  ```python
+  class UserRegistration(BaseModel):
+      # Strict for important fields
+      user_id: StrictInt
+      
+      # Lax for user-provided data
+      age: int  # '25' → 25
+      name: str  # Any string representation
+  ```
+</Accordion>
+
+<Accordion title="Performance">
+  Strict mode is faster than lax mode:
+  - No type coercion overhead
+  - Direct type checking
+  - Use for high-throughput scenarios
+</Accordion>
+
+<Accordion title="Error Messages">
+  Strict mode provides clearer error messages:
+  
+  ```python
+  # Lax mode might silently coerce
+  # Strict mode fails with clear message:
+  # "Input should be a valid integer"
+  ```
+</Accordion>

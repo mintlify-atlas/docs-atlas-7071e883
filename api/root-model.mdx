@@ -1,0 +1,326 @@
+---
+title: RootModel
+description: API reference for Pydantic's RootModel class for wrapping single values
+---
+
+A Pydantic `BaseModel` for the root object of the model.
+
+`RootModel` is used to create models that wrap a single value, such as a list or dict, rather than having multiple fields.
+
+## Class Definition
+
+```python
+class RootModel(BaseModel, Generic[RootModelRootType])
+```
+
+## Type Parameters
+
+<ParamField path="RootModelRootType" type="TypeVar">
+The type of the root value being wrapped.
+</ParamField>
+
+## Attributes
+
+<ResponseField name="root" type="RootModelRootType">
+The root object of the model.
+</ResponseField>
+
+<ResponseField name="__pydantic_root_model__" type="bool">
+Whether the model is a RootModel. Always `True` for RootModel instances.
+</ResponseField>
+
+<ResponseField name="__pydantic_private__" type="None">
+Private fields in the model. Always `None` for RootModel.
+</ResponseField>
+
+<ResponseField name="__pydantic_extra__" type="None">
+Extra fields in the model. Always `None` for RootModel.
+</ResponseField>
+
+## Constructor
+
+### `__init__`
+
+```python
+def __init__(
+    self,
+    /,
+    root: RootModelRootType = PydanticUndefined,
+    **data
+) -> None
+```
+
+Create a new RootModel instance.
+
+<ParamField path="root" type="RootModelRootType">
+The root value to wrap. Can be passed as a positional argument.
+</ParamField>
+
+<ParamField path="data" type="Any">
+Alternatively, arbitrary keyword arguments can be provided instead of `root`.
+</ParamField>
+
+<ResponseField name="raises" type="ValueError">
+If both `root` and keyword arguments are provided.
+</ResponseField>
+
+```python
+from pydantic import RootModel
+
+class Usernames(RootModel[list[str]]):
+    root: list[str]
+
+usernames = Usernames(['user1', 'user2', 'user3'])
+print(usernames.root)
+#> ['user1', 'user2', 'user3']
+
+# Or using keyword arguments
+usernames = Usernames(root=['user1', 'user2'])
+print(usernames.root)
+#> ['user1', 'user2']
+```
+
+## Construction Methods
+
+### `model_construct`
+
+```python
+@classmethod
+def model_construct(
+    cls,
+    root: RootModelRootType,
+    _fields_set: set[str] | None = None
+) -> Self
+```
+
+Create a new model using the provided root object and update fields set.
+
+<ParamField path="root" type="RootModelRootType">
+The root object of the model.
+</ParamField>
+
+<ParamField path="_fields_set" type="set[str] | None">
+The set of fields to be updated.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+The new model.
+</ResponseField>
+
+```python
+from pydantic import RootModel
+
+class Numbers(RootModel[list[int]]):
+    root: list[int]
+
+numbers = Numbers.model_construct(root=[1, 2, 3])
+print(numbers.root)
+#> [1, 2, 3]
+```
+
+## Serialization Methods
+
+### `model_dump`
+
+```python
+def model_dump(
+    self,
+    *,
+    mode: Literal['json', 'python'] | str = 'python',
+    include: Any = None,
+    exclude: Any = None,
+    context: dict[str, Any] | None = None,
+    by_alias: bool | None = None,
+    exclude_unset: bool = False,
+    exclude_defaults: bool = False,
+    exclude_none: bool = False,
+    exclude_computed_fields: bool = False,
+    round_trip: bool = False,
+    warnings: bool | Literal['none', 'warn', 'error'] = True,
+    serialize_as_any: bool = False,
+) -> Any
+```
+
+Serialize the model to a Python object.
+
+<Info>
+The return type is `Any` because it depends on the root type. For example, if the root is a list, this returns a list.
+</Info>
+
+<ParamField path="mode" type="Literal['json', 'python'] | str" default="'python'">
+The mode in which to serialize.
+</ParamField>
+
+<ParamField path="include" type="Any">
+Fields to include in the output.
+</ParamField>
+
+<ParamField path="exclude" type="Any">
+Fields to exclude from the output.
+</ParamField>
+
+<ParamField path="context" type="dict[str, Any] | None">
+Additional context to pass to the serializer.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use field aliases.
+</ParamField>
+
+<ParamField path="exclude_unset" type="bool" default="False">
+Whether to exclude unset fields.
+</ParamField>
+
+<ParamField path="exclude_defaults" type="bool" default="False">
+Whether to exclude fields with default values.
+</ParamField>
+
+<ParamField path="exclude_none" type="bool" default="False">
+Whether to exclude fields with None values.
+</ParamField>
+
+<ParamField path="exclude_computed_fields" type="bool" default="False">
+Whether to exclude computed fields.
+</ParamField>
+
+<ParamField path="round_trip" type="bool" default="False">
+Whether to enable round-trip serialization.
+</ParamField>
+
+<ParamField path="warnings" type="bool | Literal['none', 'warn', 'error']" default="True">
+How to handle serialization errors.
+</ParamField>
+
+<ParamField path="serialize_as_any" type="bool" default="False">
+Whether to serialize fields with duck-typing serialization behavior.
+</ParamField>
+
+<ResponseField name="return" type="Any">
+The serialized root value.
+</ResponseField>
+
+```python
+from pydantic import RootModel
+
+class Numbers(RootModel[list[int]]):
+    root: list[int]
+
+numbers = Numbers([1, 2, 3])
+print(numbers.model_dump())
+#> [1, 2, 3]
+```
+
+## Magic Methods
+
+### `__copy__`
+
+```python
+def __copy__(self) -> Self
+```
+
+Returns a shallow copy of the model.
+
+<ResponseField name="return" type="Self">
+A shallow copy of the model.
+</ResponseField>
+
+### `__deepcopy__`
+
+```python
+def __deepcopy__(self, memo: dict[int, Any] | None = None) -> Self
+```
+
+Returns a deep copy of the model.
+
+<ParamField path="memo" type="dict[int, Any] | None">
+Memoization dictionary for deepcopy.
+</ParamField>
+
+<ResponseField name="return" type="Self">
+A deep copy of the model.
+</ResponseField>
+
+### `__eq__`
+
+```python
+def __eq__(self, other: Any) -> bool
+```
+
+Compare two RootModel instances for equality.
+
+<ParamField path="other" type="Any">
+The other object to compare with.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+True if both models have the same root type annotation and equal values.
+</ResponseField>
+
+## Usage Examples
+
+### List Root Model
+
+```python
+from pydantic import RootModel
+
+class Colors(RootModel[list[str]]):
+    root: list[str]
+
+colors = Colors(['red', 'green', 'blue'])
+print(colors.root)
+#> ['red', 'green', 'blue']
+print(colors.model_dump())
+#> ['red', 'green', 'blue']
+```
+
+### Dict Root Model
+
+```python
+from pydantic import RootModel
+
+class Mapping(RootModel[dict[str, int]]):
+    root: dict[str, int]
+
+mapping = Mapping({'a': 1, 'b': 2})
+print(mapping.root)
+#> {'a': 1, 'b': 2}
+print(mapping.model_dump())
+#> {'a': 1, 'b': 2}
+```
+
+### Custom Type Root Model
+
+```python
+from pydantic import RootModel, BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+class UserList(RootModel[list[User]]):
+    root: list[User]
+
+users = UserList([User(name='John', age=30), User(name='Jane', age=25)])
+print(users.root)
+#> [User(name='John', age=30), User(name='Jane', age=25)]
+print(users.model_dump())
+#> [{'name': 'John', 'age': 30}, {'name': 'Jane', 'age': 25}]
+```
+
+## Configuration
+
+<Warning>
+`RootModel` does not support setting `model_config['extra']`. Attempting to set this will raise a `PydanticUserError`.
+</Warning>
+
+```python
+from pydantic import RootModel, ConfigDict
+
+try:
+    class MyModel(RootModel[list[str]]):
+        model_config = ConfigDict(extra='allow')
+        root: list[str]
+except Exception as e:
+    print(e)
+    #> RootModel does not support setting model_config['extra']
+```

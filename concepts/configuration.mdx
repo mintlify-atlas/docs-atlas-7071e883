@@ -1,0 +1,472 @@
+---
+title: Configuration
+description: Model configuration options with ConfigDict
+---
+
+Pydantic models can be configured using the `ConfigDict` to control validation, serialization, and other behaviors.
+
+## ConfigDict
+
+Define configuration using the `model_config` class attribute:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        use_enum_values=True
+    )
+    
+    name: str
+    email: str
+
+user = User(name='  John  ', email='john@example.com')
+print(user.name)
+#> John
+```
+
+## Common Configuration Options
+
+### Validation Settings
+
+#### strict
+
+Enforce strict type validation:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    value: int
+
+# This works
+model = StrictModel(value=42)
+
+# This fails - no coercion in strict mode
+try:
+    StrictModel(value='42')
+except ValidationError as e:
+    print(e)
+```
+
+#### validate_assignment
+
+Validate data when fields are changed:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class User(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
+    
+    name: str
+    age: int
+
+user = User(name='John', age=30)
+
+# This is validated
+try:
+    user.age = 'invalid'
+except ValidationError as e:
+    print(e)
+```
+
+#### validate_default
+
+Validate default values:
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+
+class Config(BaseModel):
+    model_config = ConfigDict(validate_default=True)
+    
+    port: int = Field(default=8080, gt=0)
+    host: str = 'localhost'
+
+# Default values are validated
+config = Config()
+```
+
+### Extra Fields Handling
+
+#### extra='forbid'
+
+Reject extra fields:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class User(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    
+    name: str
+    email: str
+
+try:
+    User(name='John', email='john@example.com', age=30)
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for User
+    age
+      Extra inputs are not permitted
+    '''
+```
+
+#### extra='allow'
+
+Allow and store extra fields:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    
+    name: str
+    email: str
+
+user = User(name='John', email='john@example.com', age=30, city='NYC')
+print(user.model_extra)
+#> {'age': 30, 'city': 'NYC'}
+```
+
+#### extra='ignore'
+
+Ignore extra fields (default):
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    
+    name: str
+    email: str
+
+user = User(name='John', email='john@example.com', age=30)
+print(user.model_dump())
+#> {'name': 'John', 'email': 'john@example.com'}
+```
+
+### String Processing
+
+#### str_strip_whitespace
+
+Strip whitespace from strings:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    name: str
+
+user = User(name='  John Doe  ')
+print(user.name)
+#> John Doe
+```
+
+#### str_to_lower / str_to_upper
+
+Convert strings to lowercase or uppercase:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class Config(BaseModel):
+    model_config = ConfigDict(str_to_lower=True)
+    
+    environment: str
+
+config = Config(environment='PRODUCTION')
+print(config.environment)
+#> production
+```
+
+#### str_min_length / str_max_length
+
+Set global string length constraints:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(str_min_length=1, str_max_length=100)
+    
+    name: str
+    email: str
+```
+
+### Alias Configuration
+
+#### populate_by_name
+
+Allow both alias and field name:
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+
+class User(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    
+    user_id: int = Field(alias='id')
+
+# Both work
+user1 = User(id=123)
+user2 = User(user_id=456)
+```
+
+#### alias_generator
+
+Automatically generate aliases:
+
+```python
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
+
+class User(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel)
+    
+    user_id: int
+    first_name: str
+    last_name: str
+
+user = User(userId=1, firstName='John', lastName='Doe')
+print(user.model_dump(by_alias=True))
+#> {'userId': 1, 'firstName': 'John', 'lastName': 'Doe'}
+```
+
+### Immutability
+
+#### frozen
+
+Make model instances immutable:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class ImmutableUser(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    
+    id: int
+    name: str
+
+user = ImmutableUser(id=1, name='John')
+
+try:
+    user.name = 'Jane'
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for ImmutableUser
+    name
+      Instance is frozen
+    '''
+```
+
+### Arbitrary Types
+
+#### arbitrary_types_allowed
+
+Allow non-Pydantic types:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class CustomClass:
+    def __init__(self, value: str):
+        self.value = value
+
+class Model(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    custom: CustomClass
+
+model = Model(custom=CustomClass('test'))
+print(model.custom.value)
+#> test
+```
+
+### Object Attributes
+
+#### from_attributes
+
+Build models from object attributes:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class OrmModel:
+    def __init__(self):
+        self.id = 1
+        self.name = 'John'
+
+class User(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    name: str
+
+orm_obj = OrmModel()
+user = User.model_validate(orm_obj)
+print(user)
+#> id=1 name='John'
+```
+
+### Serialization Settings
+
+#### ser_json_timedelta
+
+Control timedelta JSON serialization:
+
+```python
+from pydantic import BaseModel, ConfigDict
+from datetime import timedelta
+
+class Event(BaseModel):
+    model_config = ConfigDict(ser_json_timedelta='float')
+    
+    duration: timedelta
+
+event = Event(duration=timedelta(hours=2, minutes=30))
+print(event.model_dump_json())
+#> {"duration":9000.0}
+```
+
+#### ser_json_bytes
+
+Control bytes JSON serialization:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class Data(BaseModel):
+    model_config = ConfigDict(ser_json_bytes='base64')
+    
+    content: bytes
+
+data = Data(content=b'hello')
+print(data.model_dump_json())
+#> {"content":"aGVsbG8="}
+```
+
+### Enum Handling
+
+#### use_enum_values
+
+Use enum values instead of enum members:
+
+```python
+from enum import Enum
+from pydantic import BaseModel, ConfigDict
+
+class Status(Enum):
+    PENDING = 'pending'
+    ACTIVE = 'active'
+    INACTIVE = 'inactive'
+
+class User(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    
+    status: Status
+
+user = User(status=Status.ACTIVE)
+print(user.model_dump())
+#> {'status': 'active'}
+```
+
+### Validation Control
+
+#### revalidate_instances
+
+Control model instance revalidation:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class Address(BaseModel):
+    street: str
+    city: str
+
+class User(BaseModel):
+    model_config = ConfigDict(revalidate_instances='always')
+    
+    address: Address
+
+address = Address(street='123 Main St', city='NYC')
+address.city = None  # Invalid, but not validated yet
+
+# Revalidated when used in User
+try:
+    user = User(address=address)
+except ValidationError as e:
+    print(e)
+```
+
+### Protected Namespaces
+
+#### protected_namespaces
+
+Prevent field name conflicts:
+
+```python
+from pydantic import BaseModel, ConfigDict
+import warnings
+
+warnings.filterwarnings('error')
+
+try:
+    class Model(BaseModel):
+        model_config = ConfigDict(protected_namespaces=('model_',))
+        
+        model_id: str  # Warning: conflicts with 'model_' namespace
+except UserWarning as e:
+    print(e)
+```
+
+### Error Display
+
+#### hide_input_in_errors
+
+Hide input values in error messages:
+
+```python
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class User(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+    
+    email: str
+
+try:
+    User(email=123)
+except ValidationError as e:
+    print(e)
+    # Input value is hidden
+```
+
+## Best Practices
+
+<Note>
+  - Use `strict=True` for APIs that require exact type matching
+  - Enable `validate_assignment=True` for mutable models
+  - Set `extra='forbid'` to catch typos in field names
+  - Use `frozen=True` for immutable configuration objects
+  - Configure `alias_generator` for consistent API naming
+  - Enable `from_attributes=True` for ORM integration
+</Note>
+
+<Warning>
+  Configuration gotchas:
+  - `strict=True` applies to all fields unless overridden
+  - `validate_assignment=True` has performance implications
+  - `arbitrary_types_allowed=True` bypasses validation
+  - `frozen=True` makes the entire model immutable
+</Warning>

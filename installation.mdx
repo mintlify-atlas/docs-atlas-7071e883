@@ -1,0 +1,284 @@
+---
+title: Installation
+description: Install Pydantic using pip, conda, or uv
+---
+
+# Installation
+
+Pydantic is available on PyPI and conda-forge. Install it using your preferred package manager.
+
+## Requirements
+
+Pydantic requires Python 3.9 or higher.
+
+<Note>
+Pydantic v2.13+ requires Python 3.9+. If you need to support older Python versions, use Pydantic v1.10.
+</Note>
+
+## Quick Install
+
+<CodeGroup>
+```bash pip
+pip install pydantic
+```
+
+```bash uv
+uv pip install pydantic
+```
+
+```bash conda
+conda install pydantic -c conda-forge
+```
+</CodeGroup>
+
+That's it! Pydantic is now installed and ready to use.
+
+## Verify Installation
+
+Verify your installation by checking the version:
+
+<CodeGroup>
+```bash Command
+python -c "import pydantic; print(pydantic.VERSION)"
+```
+
+```bash Output
+2.13.0b2
+```
+</CodeGroup>
+
+## Installation Options
+
+### Standard Installation
+
+The basic installation includes everything you need for data validation:
+
+```bash
+pip install pydantic
+```
+
+This installs:
+- `pydantic` - The main library
+- `pydantic-core` - The Rust-powered validation engine
+- `typing-extensions` - Backports of new typing features
+
+### Email Validation
+
+To use `EmailStr` for email validation, install the email extra:
+
+<CodeGroup>
+```bash pip
+pip install "pydantic[email]"
+```
+
+```bash uv
+uv pip install "pydantic[email]"
+```
+</CodeGroup>
+
+This installs `email-validator` which provides comprehensive email validation:
+
+```python
+from pydantic import BaseModel, EmailStr
+
+class User(BaseModel):
+    email: EmailStr
+
+user = User(email='user@example.com')
+print(user.email)  #> user@example.com
+```
+
+### Dotenv Support
+
+For loading settings from `.env` files, install Pydantic Settings:
+
+<CodeGroup>
+```bash pip
+pip install pydantic-settings
+```
+
+```bash uv
+uv pip install pydantic-settings
+```
+</CodeGroup>
+
+```python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    database_url: str
+    api_key: str
+    
+    class Config:
+        env_file = '.env'
+
+settings = Settings()
+```
+
+### Extra Types
+
+For additional specialized types (phone numbers, payment cards, etc.), install `pydantic-extra-types`:
+
+<CodeGroup>
+```bash pip
+pip install pydantic-extra-types
+```
+
+```bash uv
+uv pip install pydantic-extra-types
+```
+</CodeGroup>
+
+## Upgrade from v1 to v2
+
+Pydantic v2 includes major improvements but has breaking changes from v1.
+
+### Migration Path
+
+Pydantic v2 ships with v1 built-in for gradual migration:
+
+```python
+# Use v2 (recommended for new code)
+from pydantic import BaseModel
+
+# Use v1 (for legacy code)
+from pydantic.v1 import BaseModel as BaseModelV1
+```
+
+<Warning>
+Pydantic v1.10 will receive only critical security fixes. New projects should use Pydantic v2.
+</Warning>
+
+### Install v1 Only
+
+If you need to stay on v1:
+
+```bash
+pip install "pydantic<2.0"
+```
+
+## Development Installation
+
+To install Pydantic from source for development:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/pydantic/pydantic.git
+    cd pydantic
+    ```
+  </Step>
+  
+  <Step title="Install in editable mode">
+    ```bash
+    pip install -e .
+    ```
+  </Step>
+  
+  <Step title="Install development dependencies">
+    ```bash
+    pip install -r requirements/all.txt
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    pytest
+    ```
+  </Step>
+</Steps>
+
+## Performance Optimization
+
+Pydantic v2 is built on `pydantic-core`, a Rust library that provides exceptional performance out of the box. No additional configuration needed!
+
+### Benchmarking Your Installation
+
+You can verify performance with this simple benchmark:
+
+```python
+from pydantic import BaseModel
+import time
+
+class Model(BaseModel):
+    a: int
+    b: float
+    c: str
+    d: list[int]
+
+# Benchmark validation speed
+start = time.time()
+for _ in range(100000):
+    Model(a=1, b=2.5, c='hello', d=[1, 2, 3])
+end = time.time()
+
+print(f"Time: {end - start:.2f}s for 100k validations")
+```
+
+## Version Information
+
+Check detailed version information including pydantic-core version:
+
+```python
+from pydantic import version_info
+
+print(version_info())
+```
+
+This outputs:
+```
+           pydantic version: 2.13.0b2
+     pydantic-core version: 2.42.0
+       pydantic-core build: ...
+            python version: 3.11.0 ...
+                  platform: ...
+        related packages: ...
+```
+
+## Troubleshooting
+
+### Import Errors
+
+If you get import errors, ensure you have a compatible version of `pydantic-core`:
+
+```bash
+pip install --upgrade pydantic pydantic-core
+```
+
+### Version Conflicts
+
+If you have version conflicts with other packages:
+
+```bash
+# List installed pydantic packages
+pip list | grep pydantic
+
+# Reinstall pydantic
+pip install --force-reinstall pydantic
+```
+
+### Type Checker Issues
+
+For the best type checking experience, use the latest version of your type checker:
+
+<CodeGroup>
+```bash mypy
+pip install --upgrade mypy
+```
+
+```bash pyright
+pip install --upgrade pyright
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/get-started/quickstart">
+    Build your first Pydantic model
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/concepts/models">
+    Learn about models, fields, and validators
+  </Card>
+</CardGroup>

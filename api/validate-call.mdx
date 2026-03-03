@@ -1,0 +1,272 @@
+---
+title: validate_call
+description: API reference for Pydantic's validate_call decorator for validating function arguments and return values.
+---
+
+The `validate_call` decorator enables validation of function arguments and optionally return values, turning regular Python functions into validated functions.
+
+## Decorator
+
+### validate_call
+
+```python
+def validate_call(
+    func: AnyCallableT | None = None,
+    /,
+    *,
+    config: ConfigDict | None = None,
+    validate_return: bool = False,
+) -> AnyCallableT | Callable[[AnyCallableT], AnyCallableT]
+```
+
+Returns a decorated wrapper around a function that validates the arguments and, optionally, the return value.
+
+<ParamField path="func" type="Callable | None" default="None">
+  The function to be decorated. When `None`, returns a decorator function. This allows the decorator to be used with or without parentheses.
+</ParamField>
+
+<ParamField path="config" type="ConfigDict | None" default="None">
+  Optional configuration dictionary to customize validation behavior. Accepts the same options as `BaseModel.model_config`.
+</ParamField>
+
+<ParamField path="validate_return" type="bool" default="False">
+  Whether to validate the return value of the function. When `True`, the function's return type annotation is validated.
+</ParamField>
+
+## Usage
+
+The decorator can be used in two ways:
+
+### Without Arguments
+
+```python
+from pydantic import validate_call
+
+@validate_call
+def repeat(s: str, count: int) -> str:
+    return s * count
+
+repeat('hello', 2)
+#> 'hellohello'
+
+repeat('hello', '2')  # String gets coerced to int
+#> 'hellohello'
+
+try:
+    repeat('hello', 'invalid')
+except ValidationError as e:
+    print(e)
+    # 1 validation error for repeat
+    # 1
+    #   Input should be a valid integer
+```
+
+### With Arguments
+
+```python
+from pydantic import validate_call, ConfigDict
+
+@validate_call(config=ConfigDict(strict=True), validate_return=True)
+def multiply(a: int, b: int) -> int:
+    return a * b
+
+multiply(2, 3)
+#> 6
+
+try:
+    multiply('2', 3)  # Strict mode: no coercion
+except ValidationError as e:
+    print(e)
+    # 1 validation error for multiply
+    # 0
+    #   Input should be a valid integer
+```
+
+## Validating Return Values
+
+When `validate_return=True`, the function's return value is validated against its return type annotation:
+
+```python
+from pydantic import validate_call, ValidationError
+
+@validate_call(validate_return=True)
+def get_number() -> int:
+    return "not a number"  # This will raise ValidationError
+
+try:
+    get_number()
+except ValidationError as e:
+    print(e)
+    # 1 validation error for get_number
+    # return
+    #   Input should be a valid integer
+```
+
+## Configuration
+
+You can pass any `ConfigDict` options to customize validation behavior:
+
+```python
+from pydantic import validate_call, ConfigDict
+
+@validate_call(
+    config=ConfigDict(
+        strict=True,           # Enable strict mode (no coercion)
+        validate_default=True, # Validate default values
+        arbitrary_types_allowed=True,  # Allow arbitrary types
+    )
+)
+def process_data(data: CustomType, flag: bool = True) -> dict:
+    return {'data': data, 'flag': flag}
+```
+
+## Supported Function Types
+
+The `validate_call` decorator supports:
+
+- Regular functions
+- Methods (instance, class, and static methods)
+- Lambda functions
+- `functools.partial` wrapped functions
+
+<Warning>
+Apply decorators in the correct order. The `@validate_call` decorator should be applied **before** (below) `@classmethod`, `@staticmethod`, or `@property` decorators:
+
+```python
+class MyClass:
+    @classmethod
+    @validate_call  # Correct: validate_call below classmethod
+    def my_method(cls, value: int) -> int:
+        return value
+```
+</Warning>
+
+## Limitations
+
+The following are **not** supported by `validate_call`:
+
+- Built-in functions (e.g., `len`, `print`)
+- Classes (use Pydantic models instead)
+- Callable instances (apply to `__call__` method directly)
+
+## Type Annotations
+
+The decorator uses the function's type annotations to determine how to validate arguments:
+
+```python
+from typing import List, Optional
+from pydantic import validate_call
+
+@validate_call
+def process_items(
+    items: List[int],
+    multiplier: float = 1.0,
+    prefix: Optional[str] = None,
+) -> List[float]:
+    result = [item * multiplier for item in items]
+    return result
+
+process_items([1, 2, 3], 2.5)
+#> [2.5, 5.0, 7.5]
+
+process_items(['1', '2', '3'], '2')  # Coercion works
+#> [2.0, 4.0, 6.0]
+```
+
+## Error Handling
+
+Validation errors are raised as `ValidationError` exceptions:
+
+```python
+from pydantic import validate_call, ValidationError
+
+@validate_call
+def divide(a: int, b: int) -> float:
+    return a / b
+
+try:
+    divide(10, 'zero')
+except ValidationError as e:
+    print(e.errors())
+    # [
+    #     {
+    #         'type': 'int_parsing',
+    #         'loc': (1,),
+    #         'msg': 'Input should be a valid integer',
+    #         'input': 'zero',
+    #     }
+    # ]
+```
+
+## Performance Considerations
+
+The `validate_call` decorator adds validation overhead to function calls. For performance-critical code:
+
+- Consider validating only at API boundaries
+- Use `ConfigDict(arbitrary_types_allowed=True)` to skip validation for complex types
+- Profile your code to measure the impact
+
+## Examples
+
+### Validating a Method
+
+```python
+from pydantic import validate_call
+
+class Calculator:
+    @validate_call
+    def add(self, a: int, b: int) -> int:
+        return a + b
+    
+    @classmethod
+    @validate_call
+    def multiply(cls, a: int, b: int) -> int:
+        return a * b
+
+calc = Calculator()
+calc.add(5, 3)
+#> 8
+
+Calculator.multiply(4, 2)
+#> 8
+```
+
+### Using with Partial Functions
+
+```python
+from functools import partial
+from pydantic import validate_call
+
+@validate_call
+def power(base: int, exponent: int) -> int:
+    return base ** exponent
+
+square = partial(power, exponent=2)
+square(5)
+#> 25
+
+square('3')  # Coercion works through partial
+#> 9
+```
+
+### Custom Validation with Config
+
+```python
+from pydantic import validate_call, ConfigDict, field_validator
+from pydantic.dataclasses import dataclass
+
+@dataclass
+class Point:
+    x: int
+    y: int
+
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+def distance(p1: Point, p2: Point) -> float:
+    return ((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2) ** 0.5
+
+point1 = Point(x=0, y=0)
+point2 = Point(x=3, y=4)
+
+distance(point1, point2)
+#> 5.0
+```

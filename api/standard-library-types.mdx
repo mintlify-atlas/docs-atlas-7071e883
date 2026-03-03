@@ -1,0 +1,489 @@
+---
+title: Standard Library Types
+description: Standard library types supported by Pydantic
+---
+
+Pydantic provides extensive support for Python's standard library types with automatic validation and coercion.
+
+## Primitive Types
+
+### bool
+
+Boolean validation with coercion from common truthy/falsy values.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    is_active: bool
+
+# Accepts various truthy/falsy values
+print(Model(is_active=1).is_active)  # True
+print(Model(is_active=0).is_active)  # False
+print(Model(is_active='yes').is_active)  # True
+print(Model(is_active='no').is_active)  # False
+```
+
+For strict boolean validation without coercion, use [`StrictBool`](/api/types#strictbool).
+
+### int
+
+Integer validation with coercion from compatible types.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    count: int
+
+print(Model(count=5).count)  # 5
+print(Model(count='10').count)  # 10
+print(Model(count=3.0).count)  # 3
+```
+
+For strict integer validation or constrained integers, see [Integer Types](/api/types#integer-types).
+
+### float
+
+Float validation with coercion from compatible types.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: float
+
+print(Model(value=5).value)  # 5.0
+print(Model(value='10.5').value)  # 10.5
+print(Model(value=3.14).value)  # 3.14
+```
+
+For strict float validation or constrained floats, see [Float Types](/api/types#float-types).
+
+### str
+
+String validation with coercion from various types.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    name: str
+
+print(Model(name='hello').name)  # 'hello'
+print(Model(name=123).name)  # '123'
+```
+
+For strict string validation or constrained strings, see [String Types](/api/types#string-types).
+
+### bytes
+
+Bytes validation.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    data: bytes
+
+print(Model(data=b'hello').data)  # b'hello'
+print(Model(data='hello').data)  # b'hello'
+```
+
+For strict bytes validation or constrained bytes, see [Bytes Types](/api/types#bytes-types).
+
+## Collection Types
+
+### list
+
+List validation with type checking for items.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    items: list[int]
+
+print(Model(items=[1, 2, 3]).items)  # [1, 2, 3]
+print(Model(items=['1', '2', '3']).items)  # [1, 2, 3]
+```
+
+For constrained lists, see [`conlist`](/api/types#conlist).
+
+### tuple
+
+Tuple validation with type checking for items.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    # Fixed-length tuple
+    coordinates: tuple[int, int]
+    # Variable-length tuple
+    values: tuple[int, ...]
+
+print(Model(coordinates=(1, 2), values=(1, 2, 3)).coordinates)  # (1, 2)
+```
+
+### set
+
+Set validation with type checking for items and automatic deduplication.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    unique_items: set[int]
+
+print(Model(unique_items=[1, 2, 2, 3]).unique_items)  # {1, 2, 3}
+```
+
+For constrained sets, see [`conset`](/api/types#conset).
+
+### frozenset
+
+Frozenset validation with type checking for items.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    immutable_items: frozenset[int]
+
+print(Model(immutable_items=[1, 2, 3]).immutable_items)  # frozenset({1, 2, 3})
+```
+
+For constrained frozensets, see [`confrozenset`](/api/types#confrozenset).
+
+### dict
+
+Dictionary validation with type checking for keys and values.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    mapping: dict[str, int]
+
+print(Model(mapping={'a': 1, 'b': 2}).mapping)  # {'a': 1, 'b': 2}
+print(Model(mapping={'a': '1', 'b': '2'}).mapping)  # {'a': 1, 'b': 2}
+```
+
+## Date and Time Types
+
+### datetime
+
+Datetime validation with parsing from various formats.
+
+```python
+from datetime import datetime
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    timestamp: datetime
+
+print(Model(timestamp='2023-01-01T12:00:00').timestamp)
+print(Model(timestamp=datetime(2023, 1, 1, 12, 0, 0)).timestamp)
+```
+
+For timezone-aware or timezone-naive validation, see [AwareDatetime](/api/types#awaredatetime) and [NaiveDatetime](/api/types#naivedatetime).
+
+### date
+
+Date validation with parsing from various formats.
+
+```python
+from datetime import date
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    birth_date: date
+
+print(Model(birth_date='2023-01-01').birth_date)
+print(Model(birth_date=date(2023, 1, 1)).birth_date)
+```
+
+For constrained dates, see [PastDate](/api/types#pastdate), [FutureDate](/api/types#futuredate), and [condate](/api/types#condate).
+
+### time
+
+Time validation with parsing from various formats.
+
+```python
+from datetime import time
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    schedule: time
+
+print(Model(schedule='12:00:00').schedule)
+print(Model(schedule=time(12, 0, 0)).schedule)
+```
+
+### timedelta
+
+Timedelta validation with parsing from various formats.
+
+```python
+from datetime import timedelta
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    duration: timedelta
+
+print(Model(duration=3600).duration)  # 1:00:00 (seconds)
+print(Model(duration=timedelta(hours=1)).duration)  # 1:00:00
+```
+
+## Numeric Types
+
+### Decimal
+
+Decimal validation for precise decimal arithmetic.
+
+```python
+from decimal import Decimal
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    price: Decimal
+
+print(Model(price='10.50').price)  # Decimal('10.50')
+print(Model(price=10.5).price)  # Decimal('10.5')
+```
+
+For constrained decimals, see [condecimal](/api/types#condecimal).
+
+### complex
+
+Complex number validation.
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    number: complex
+
+print(Model(number='1+2j').number)  # (1+2j)
+print(Model(number=complex(1, 2)).number)  # (1+2j)
+```
+
+### Fraction
+
+Fraction validation for rational numbers.
+
+```python
+from fractions import Fraction
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    ratio: Fraction
+
+print(Model(ratio='1/2').ratio)  # Fraction(1, 2)
+print(Model(ratio=Fraction(1, 2)).ratio)  # Fraction(1, 2)
+```
+
+## UUID Types
+
+UUID validation with automatic parsing from strings.
+
+```python
+from uuid import UUID, uuid4
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    id: UUID
+
+print(Model(id='550e8400-e29b-41d4-a716-446655440000').id)
+print(Model(id=uuid4()).id)
+```
+
+For version-specific UUID validation, see [UUID Types](/api/types#uuid-types).
+
+## Path Types
+
+### Path
+
+Path validation with automatic conversion to `pathlib.Path`.
+
+```python
+from pathlib import Path
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    file_path: Path
+
+print(Model(file_path='/tmp/file.txt').file_path)
+print(Model(file_path=Path('/tmp/file.txt')).file_path)
+```
+
+For constrained paths, see [Path Types](/api/types#path-types).
+
+## Enum Types
+
+### Enum
+
+Enum validation with automatic member lookup.
+
+```python
+from enum import Enum
+from pydantic import BaseModel
+
+class Color(str, Enum):
+    RED = 'red'
+    GREEN = 'green'
+    BLUE = 'blue'
+
+class Model(BaseModel):
+    color: Color
+
+print(Model(color='red').color)  # Color.RED
+print(Model(color=Color.RED).color)  # Color.RED
+```
+
+### IntEnum
+
+Integer enum validation.
+
+```python
+from enum import IntEnum
+from pydantic import BaseModel
+
+class Priority(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+class Model(BaseModel):
+    priority: Priority
+
+print(Model(priority=1).priority)  # Priority.LOW
+print(Model(priority=Priority.HIGH).priority)  # Priority.HIGH
+```
+
+## Literal Types
+
+Literal validation for specific allowed values.
+
+```python
+from typing import Literal
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    status: Literal['active', 'inactive', 'pending']
+
+print(Model(status='active').status)  # 'active'
+```
+
+## Union Types
+
+Union validation allowing multiple types.
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: Union[int, str]
+
+print(Model(value=42).value)  # 42
+print(Model(value='hello').value)  # 'hello'
+```
+
+For discriminated unions, see [Discriminator](/api/types#discriminator).
+
+## Optional Types
+
+Optional validation allowing `None` values.
+
+```python
+from typing import Optional
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: Optional[int] = None
+
+print(Model().value)  # None
+print(Model(value=42).value)  # 42
+```
+
+## Type Aliases
+
+### Any
+
+Accepts any value without validation.
+
+```python
+from typing import Any
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: Any
+
+print(Model(value='anything').value)  # 'anything'
+print(Model(value=123).value)  # 123
+print(Model(value=[1, 2, 3]).value)  # [1, 2, 3]
+```
+
+## Callable Types
+
+### Callable
+
+Validates callable objects.
+
+```python
+from typing import Callable
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    func: Callable[[int, int], int]
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+print(Model(func=add).func(1, 2))  # 3
+```
+
+## Annotated Types
+
+### Annotated
+
+Provides metadata for types.
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    value: Annotated[int, Field(gt=0, description="Must be positive")]
+
+print(Model(value=5).value)  # 5
+```
+
+## Pattern Types
+
+### Pattern
+
+Regex pattern validation.
+
+```python
+import re
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    pattern: re.Pattern
+
+print(Model(pattern=r'^\d+$').pattern)
+print(Model(pattern=re.compile(r'^\d+$')).pattern)
+```
+
+## IP Address Types
+
+See [Network Types](/api/network-types) for IP address validation including:
+- `IPv4Address`
+- `IPv6Address`
+- `IPv4Network`
+- `IPv6Network`
+- `IPv4Interface`
+- `IPv6Interface`

@@ -1,0 +1,1280 @@
+---
+title: Types
+description: Pydantic custom types for enhanced validation
+---
+
+Pydantic provides a comprehensive set of custom types for advanced data validation beyond Python's standard types.
+
+## Strict Types
+
+### Strict
+
+A field metadata class to indicate that a field should be validated in strict mode.
+
+<ParamField path="strict" type="bool" default="True">
+  Whether to validate the field in strict mode
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic.types import Strict
+
+StrictBool = Annotated[bool, Strict()]
+```
+
+### StrictBool
+
+A boolean that must be either `True` or `False`.
+
+```python
+from pydantic import BaseModel, StrictBool
+
+class Model(BaseModel):
+    value: StrictBool
+```
+
+### StrictInt
+
+An integer that must be validated in strict mode (no coercion from floats or strings).
+
+```python
+from pydantic import BaseModel, StrictInt, ValidationError
+
+class StrictIntModel(BaseModel):
+    strict_int: StrictInt
+
+try:
+    StrictIntModel(strict_int=3.14159)
+except ValidationError as e:
+    print(e)
+    # Input should be a valid integer
+```
+
+### StrictFloat
+
+A float that must be validated in strict mode (no coercion from strings).
+
+```python
+from pydantic import BaseModel, StrictFloat
+
+class StrictFloatModel(BaseModel):
+    strict_float: StrictFloat
+```
+
+### StrictStr
+
+A string that must be validated in strict mode.
+
+```python
+from pydantic import BaseModel, StrictStr
+
+class Model(BaseModel):
+    value: StrictStr
+```
+
+### StrictBytes
+
+A bytes that must be validated in strict mode.
+
+```python
+from pydantic import BaseModel, StrictBytes
+
+class Model(BaseModel):
+    value: StrictBytes
+```
+
+## Integer Types
+
+### conint
+
+A wrapper around `int` that allows for additional constraints.
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the integer in strict mode
+</ParamField>
+
+<ParamField path="gt" type="int | None">
+  The value must be greater than this
+</ParamField>
+
+<ParamField path="ge" type="int | None">
+  The value must be greater than or equal to this
+</ParamField>
+
+<ParamField path="lt" type="int | None">
+  The value must be less than this
+</ParamField>
+
+<ParamField path="le" type="int | None">
+  The value must be less than or equal to this
+</ParamField>
+
+<ParamField path="multiple_of" type="int | None">
+  The value must be a multiple of this
+</ParamField>
+
+```python
+from pydantic import BaseModel, conint
+
+class ConstrainedExample(BaseModel):
+    constrained_int: conint(gt=1)
+
+m = ConstrainedExample(constrained_int=2)
+```
+
+<Warning>
+This function is **discouraged** in favor of using `Annotated` with `Field` instead. Use `Annotated[int, Field(gt=0)]` instead of `conint(gt=0)`.
+</Warning>
+
+### PositiveInt
+
+An integer that must be greater than zero.
+
+```python
+from pydantic import BaseModel, PositiveInt
+
+class Model(BaseModel):
+    positive_int: PositiveInt
+
+m = Model(positive_int=1)
+```
+
+### NegativeInt
+
+An integer that must be less than zero.
+
+```python
+from pydantic import BaseModel, NegativeInt
+
+class Model(BaseModel):
+    negative_int: NegativeInt
+
+m = Model(negative_int=-1)
+```
+
+### NonNegativeInt
+
+An integer that must be greater than or equal to zero.
+
+```python
+from pydantic import BaseModel, NonNegativeInt
+
+class Model(BaseModel):
+    non_negative_int: NonNegativeInt
+
+m = Model(non_negative_int=0)
+```
+
+### NonPositiveInt
+
+An integer that must be less than or equal to zero.
+
+```python
+from pydantic import BaseModel, NonPositiveInt
+
+class Model(BaseModel):
+    non_positive_int: NonPositiveInt
+
+m = Model(non_positive_int=0)
+```
+
+## Float Types
+
+### confloat
+
+A wrapper around `float` that allows for additional constraints.
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the float in strict mode
+</ParamField>
+
+<ParamField path="gt" type="float | None">
+  The value must be greater than this
+</ParamField>
+
+<ParamField path="ge" type="float | None">
+  The value must be greater than or equal to this
+</ParamField>
+
+<ParamField path="lt" type="float | None">
+  The value must be less than this
+</ParamField>
+
+<ParamField path="le" type="float | None">
+  The value must be less than or equal to this
+</ParamField>
+
+<ParamField path="multiple_of" type="float | None">
+  The value must be a multiple of this
+</ParamField>
+
+<ParamField path="allow_inf_nan" type="bool | None">
+  Whether to allow `-inf`, `inf`, and `nan`
+</ParamField>
+
+```python
+from pydantic import BaseModel, confloat
+
+class ConstrainedExample(BaseModel):
+    constrained_float: confloat(gt=1.0)
+
+m = ConstrainedExample(constrained_float=1.1)
+```
+
+<Warning>
+This function is **discouraged** in favor of using `Annotated` with `Field` instead.
+</Warning>
+
+### PositiveFloat
+
+A float that must be greater than zero.
+
+```python
+from pydantic import BaseModel, PositiveFloat
+
+class Model(BaseModel):
+    positive_float: PositiveFloat
+
+m = Model(positive_float=1.0)
+```
+
+### NegativeFloat
+
+A float that must be less than zero.
+
+```python
+from pydantic import BaseModel, NegativeFloat
+
+class Model(BaseModel):
+    negative_float: NegativeFloat
+
+m = Model(negative_float=-1.0)
+```
+
+### NonNegativeFloat
+
+A float that must be greater than or equal to zero.
+
+```python
+from pydantic import BaseModel, NonNegativeFloat
+
+class Model(BaseModel):
+    non_negative_float: NonNegativeFloat
+
+m = Model(non_negative_float=0.0)
+```
+
+### NonPositiveFloat
+
+A float that must be less than or equal to zero.
+
+```python
+from pydantic import BaseModel, NonPositiveFloat
+
+class Model(BaseModel):
+    non_positive_float: NonPositiveFloat
+
+m = Model(non_positive_float=0.0)
+```
+
+### FiniteFloat
+
+A float that must be finite (not `-inf`, `inf`, or `nan`).
+
+```python
+from pydantic import BaseModel, FiniteFloat
+
+class Model(BaseModel):
+    finite: FiniteFloat
+
+m = Model(finite=1.0)
+```
+
+### AllowInfNan
+
+A field metadata class to indicate that a field should allow `-inf`, `inf`, and `nan`.
+
+<ParamField path="allow_inf_nan" type="bool" default="True">
+  Whether to allow `-inf`, `inf`, and `nan`
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic.types import AllowInfNan
+
+LaxFloat = Annotated[float, AllowInfNan()]
+```
+
+## String Types
+
+### constr
+
+A wrapper around `str` that allows for additional constraints.
+
+<ParamField path="strip_whitespace" type="bool | None">
+  Whether to remove leading and trailing whitespace
+</ParamField>
+
+<ParamField path="to_upper" type="bool | None">
+  Whether to convert the string to uppercase
+</ParamField>
+
+<ParamField path="to_lower" type="bool | None">
+  Whether to convert the string to lowercase
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the string in strict mode
+</ParamField>
+
+<ParamField path="min_length" type="int | None">
+  The minimum length of the string
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the string
+</ParamField>
+
+<ParamField path="pattern" type="str | Pattern[str] | None">
+  A regex pattern that the string must match
+</ParamField>
+
+```python
+from pydantic import BaseModel, constr
+
+class Foo(BaseModel):
+    bar: constr(strip_whitespace=True, to_upper=True)
+
+foo = Foo(bar='  hello  ')
+print(foo)
+# bar='HELLO'
+```
+
+<Warning>
+This function is **discouraged** in favor of using `Annotated` with `StringConstraints` instead.
+</Warning>
+
+### StringConstraints
+
+A field metadata class to apply constraints to `str` types.
+
+<ParamField path="strip_whitespace" type="bool | None">
+  Whether to remove leading and trailing whitespace
+</ParamField>
+
+<ParamField path="to_upper" type="bool | None">
+  Whether to convert the string to uppercase
+</ParamField>
+
+<ParamField path="to_lower" type="bool | None">
+  Whether to convert the string to lowercase
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the string in strict mode
+</ParamField>
+
+<ParamField path="min_length" type="int | None">
+  The minimum length of the string
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the string
+</ParamField>
+
+<ParamField path="pattern" type="str | Pattern[str] | None">
+  A regex pattern that the string must match
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic.types import StringConstraints
+
+ConstrainedStr = Annotated[str, StringConstraints(min_length=1, max_length=10)]
+```
+
+## Bytes Types
+
+### conbytes
+
+A wrapper around `bytes` that allows for additional constraints.
+
+<ParamField path="min_length" type="int | None">
+  The minimum length of the bytes
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the bytes
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the bytes in strict mode
+</ParamField>
+
+```python
+from pydantic import BaseModel, conbytes
+
+class Model(BaseModel):
+    value: conbytes(min_length=10, max_length=100)
+```
+
+## Collection Types
+
+### conlist
+
+A wrapper around `list` that adds validation.
+
+<ParamField path="item_type" type="type">
+  The type of the items in the list
+</ParamField>
+
+<ParamField path="min_length" type="int | None">
+  The minimum length of the list
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the list
+</ParamField>
+
+```python
+from pydantic import BaseModel, conlist
+
+class Model(BaseModel):
+    items: conlist(int, min_length=1, max_length=10)
+```
+
+### conset
+
+A wrapper around `set` that allows for additional constraints.
+
+<ParamField path="item_type" type="type">
+  The type of the items in the set
+</ParamField>
+
+<ParamField path="min_length" type="int | None">
+  The minimum length of the set
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the set
+</ParamField>
+
+```python
+from pydantic import BaseModel, conset
+
+class Model(BaseModel):
+    items: conset(int, min_length=1, max_length=10)
+```
+
+### confrozenset
+
+A wrapper around `frozenset` that allows for additional constraints.
+
+<ParamField path="item_type" type="type">
+  The type of the items in the frozenset
+</ParamField>
+
+<ParamField path="min_length" type="int | None">
+  The minimum length of the frozenset
+</ParamField>
+
+<ParamField path="max_length" type="int | None">
+  The maximum length of the frozenset
+</ParamField>
+
+```python
+from pydantic import BaseModel, confrozenset
+
+class Model(BaseModel):
+    items: confrozenset(int, min_length=1, max_length=10)
+```
+
+## UUID Types
+
+### UuidVersion
+
+A field metadata class to indicate a UUID version.
+
+<ParamField path="uuid_version" type="Literal[1, 3, 4, 5, 6, 7, 8]">
+  The version of the UUID
+</ParamField>
+
+```python
+from typing import Annotated
+from uuid import UUID
+from pydantic.types import UuidVersion
+
+UUID1 = Annotated[UUID, UuidVersion(1)]
+```
+
+### UUID1
+
+A UUID that must be version 1.
+
+```python
+import uuid
+from pydantic import UUID1, BaseModel
+
+class Model(BaseModel):
+    uuid1: UUID1
+
+Model(uuid1=uuid.uuid1())
+```
+
+### UUID3
+
+A UUID that must be version 3.
+
+```python
+import uuid
+from pydantic import UUID3, BaseModel
+
+class Model(BaseModel):
+    uuid3: UUID3
+
+Model(uuid3=uuid.uuid3(uuid.NAMESPACE_DNS, 'pydantic.org'))
+```
+
+### UUID4
+
+A UUID that must be version 4.
+
+```python
+import uuid
+from pydantic import UUID4, BaseModel
+
+class Model(BaseModel):
+    uuid4: UUID4
+
+Model(uuid4=uuid.uuid4())
+```
+
+### UUID5
+
+A UUID that must be version 5.
+
+```python
+import uuid
+from pydantic import UUID5, BaseModel
+
+class Model(BaseModel):
+    uuid5: UUID5
+
+Model(uuid5=uuid.uuid5(uuid.NAMESPACE_DNS, 'pydantic.org'))
+```
+
+### UUID6
+
+A UUID that must be version 6.
+
+```python
+import uuid
+from pydantic import UUID6, BaseModel
+
+class Model(BaseModel):
+    uuid6: UUID6
+
+Model(uuid6=uuid.UUID('1efea953-c2d6-6790-aa0a-69db8c87df97'))
+```
+
+### UUID7
+
+A UUID that must be version 7.
+
+```python
+import uuid
+from pydantic import UUID7, BaseModel
+
+class Model(BaseModel):
+    uuid7: UUID7
+
+Model(uuid7=uuid.UUID('0194fdcb-1c47-7a09-b52c-561154de0b4a'))
+```
+
+### UUID8
+
+A UUID that must be version 8.
+
+```python
+import uuid
+from pydantic import UUID8, BaseModel
+
+class Model(BaseModel):
+    uuid8: UUID8
+
+Model(uuid8=uuid.UUID('81a0b92e-6078-8551-9c81-8ccb666bdab8'))
+```
+
+## Path Types
+
+### FilePath
+
+A path that must point to a file.
+
+```python
+from pathlib import Path
+from pydantic import BaseModel, FilePath
+
+class Model(BaseModel):
+    f: FilePath
+
+path = Path('text.txt')
+path.touch()
+m = Model(f='text.txt')
+print(m.model_dump())
+# {'f': PosixPath('text.txt')}
+path.unlink()
+```
+
+### DirectoryPath
+
+A path that must point to a directory.
+
+```python
+from pathlib import Path
+from pydantic import BaseModel, DirectoryPath
+
+class Model(BaseModel):
+    f: DirectoryPath
+
+path = Path('directory/')
+path.mkdir()
+m = Model(f='directory/')
+print(m.model_dump())
+# {'f': PosixPath('directory')}
+path.rmdir()
+```
+
+### NewPath
+
+A path for a new file or directory that must not already exist. The parent directory must already exist.
+
+```python
+from pydantic import BaseModel, NewPath
+
+class Model(BaseModel):
+    f: NewPath
+```
+
+### SocketPath
+
+A path to an existing socket file.
+
+```python
+from pydantic import BaseModel, SocketPath
+
+class Model(BaseModel):
+    f: SocketPath
+```
+
+## Secret Types
+
+### Secret
+
+A generic base class used for defining a field with sensitive information that you do not want to be visible in logging or tracebacks.
+
+```python
+from pydantic import BaseModel, Secret
+
+SecretBool = Secret[bool]
+
+class Model(BaseModel):
+    secret_bool: SecretBool
+
+m = Model(secret_bool=True)
+print(m.model_dump())
+# {'secret_bool': Secret('**********')}
+
+print(m.secret_bool.get_secret_value())
+# True
+```
+
+### SecretStr
+
+A string used for storing sensitive information that you do not want to be visible in logging or tracebacks.
+
+```python
+from pydantic import BaseModel, SecretStr
+
+class User(BaseModel):
+    username: str
+    password: SecretStr
+
+user = User(username='scolvin', password='password1')
+
+print(user)
+# username='scolvin' password=SecretStr('**********')
+print(user.password.get_secret_value())
+# password1
+```
+
+### SecretBytes
+
+A bytes used for storing sensitive information that you do not want to be visible in logging or tracebacks.
+
+```python
+from pydantic import BaseModel, SecretBytes
+
+class User(BaseModel):
+    username: str
+    password: SecretBytes
+
+user = User(username='scolvin', password=b'password1')
+print(user.password.get_secret_value())
+# b'password1'
+```
+
+## JSON Types
+
+### Json
+
+A special type wrapper which loads JSON before parsing.
+
+```python
+from typing import Any
+from pydantic import BaseModel, Json
+
+class AnyJsonModel(BaseModel):
+    json_obj: Json[Any]
+
+class ConstrainedJsonModel(BaseModel):
+    json_obj: Json[list[int]]
+
+print(AnyJsonModel(json_obj='{"b": 1}'))
+# json_obj={'b': 1}
+print(ConstrainedJsonModel(json_obj='[1, 2, 3]'))
+# json_obj=[1, 2, 3]
+```
+
+### JsonValue
+
+A type used to represent a value that can be serialized to JSON.
+
+May be one of:
+- `list['JsonValue']`
+- `dict[str, 'JsonValue']`
+- `str`
+- `bool`
+- `int`
+- `float`
+- `None`
+
+```python
+from pydantic import BaseModel, JsonValue
+
+class Model(BaseModel):
+    j: JsonValue
+
+valid_json_data = {'j': {'a': {'b': {'c': 1, 'd': [2, None]}}}}
+print(repr(Model.model_validate(valid_json_data)))
+# Model(j={'a': {'b': {'c': 1, 'd': [2, None]}}})
+```
+
+## Date and Time Types
+
+### PastDate
+
+A date in the past.
+
+```python
+from pydantic import BaseModel, PastDate
+
+class Model(BaseModel):
+    past_date: PastDate
+```
+
+### FutureDate
+
+A date in the future.
+
+```python
+from pydantic import BaseModel, FutureDate
+
+class Model(BaseModel):
+    future_date: FutureDate
+```
+
+### condate
+
+A wrapper for date that adds constraints.
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the date value in strict mode
+</ParamField>
+
+<ParamField path="gt" type="date | None">
+  The value must be greater than this
+</ParamField>
+
+<ParamField path="ge" type="date | None">
+  The value must be greater than or equal to this
+</ParamField>
+
+<ParamField path="lt" type="date | None">
+  The value must be less than this
+</ParamField>
+
+<ParamField path="le" type="date | None">
+  The value must be less than or equal to this
+</ParamField>
+
+```python
+from datetime import date
+from pydantic import BaseModel, condate
+
+class Model(BaseModel):
+    d: condate(gt=date(2020, 1, 1))
+```
+
+### PastDatetime
+
+A datetime that must be in the past.
+
+```python
+from pydantic import BaseModel, PastDatetime
+
+class Model(BaseModel):
+    past_datetime: PastDatetime
+```
+
+### FutureDatetime
+
+A datetime that must be in the future.
+
+```python
+from pydantic import BaseModel, FutureDatetime
+
+class Model(BaseModel):
+    future_datetime: FutureDatetime
+```
+
+### AwareDatetime
+
+A datetime that requires timezone info.
+
+```python
+from pydantic import BaseModel, AwareDatetime
+
+class Model(BaseModel):
+    aware_datetime: AwareDatetime
+```
+
+### NaiveDatetime
+
+A datetime that doesn't require timezone info.
+
+```python
+from pydantic import BaseModel, NaiveDatetime
+
+class Model(BaseModel):
+    naive_datetime: NaiveDatetime
+```
+
+## Decimal Types
+
+### condecimal
+
+A wrapper around Decimal that adds validation.
+
+<ParamField path="strict" type="bool | None">
+  Whether to validate the value in strict mode
+</ParamField>
+
+<ParamField path="gt" type="int | Decimal | None">
+  The value must be greater than this
+</ParamField>
+
+<ParamField path="ge" type="int | Decimal | None">
+  The value must be greater than or equal to this
+</ParamField>
+
+<ParamField path="lt" type="int | Decimal | None">
+  The value must be less than this
+</ParamField>
+
+<ParamField path="le" type="int | Decimal | None">
+  The value must be less than or equal to this
+</ParamField>
+
+<ParamField path="multiple_of" type="int | Decimal | None">
+  The value must be a multiple of this
+</ParamField>
+
+<ParamField path="max_digits" type="int | None">
+  The maximum number of digits
+</ParamField>
+
+<ParamField path="decimal_places" type="int | None">
+  The number of decimal places
+</ParamField>
+
+<ParamField path="allow_inf_nan" type="bool | None">
+  Whether to allow infinity and NaN
+</ParamField>
+
+```python
+from decimal import Decimal
+from pydantic import BaseModel, condecimal
+
+class ConstrainedExample(BaseModel):
+    constrained_decimal: condecimal(gt=Decimal('1.0'))
+
+m = ConstrainedExample(constrained_decimal=Decimal('1.1'))
+```
+
+<Warning>
+This function is **discouraged** in favor of using `Annotated` with `Field` instead.
+</Warning>
+
+## Specialized Types
+
+### ImportString
+
+A type that can be used to import a Python object from a string.
+
+`ImportString` expects a string and loads the Python object importable at that dotted path.
+Attributes of modules may be separated from the module by `:` or `.`.
+
+```python
+import math
+from pydantic import BaseModel, ImportString
+
+class ImportThings(BaseModel):
+    obj: ImportString
+
+# A string value will cause an automatic import
+my_cos = ImportThings(obj='math.cos')
+
+# You can use the imported function as you would expect
+cos_of_0 = my_cos.obj(0)
+assert cos_of_0 == 1
+
+# Actual python objects can be assigned as well
+my_cos = ImportThings(obj=math.cos)
+```
+
+### PaymentCardNumber
+
+Validates payment card numbers using the Luhn algorithm.
+
+<Warning>
+**Deprecated**: The `PaymentCardNumber` class is deprecated, use `pydantic_extra_types` instead.
+</Warning>
+
+```python
+from pydantic import BaseModel, PaymentCardNumber
+
+class Payment(BaseModel):
+    card_number: PaymentCardNumber
+```
+
+### ByteSize
+
+Converts a string representing a number of bytes with units (such as `'1KB'` or `'11.5MiB'`) into an integer.
+
+```python
+from pydantic import BaseModel, ByteSize
+
+class MyModel(BaseModel):
+    size: ByteSize
+
+print(MyModel(size=52000).size)
+# 52000
+print(MyModel(size='3000 KiB').size)
+# 3072000
+
+m = MyModel(size='50 PB')
+print(m.size.human_readable())
+# 44.4PiB
+print(m.size.human_readable(decimal=True))
+# 50.0PB
+
+print(m.size.to('TiB'))
+# 45474.73508864641
+```
+
+## Encoded Types
+
+### EncoderProtocol
+
+Protocol for encoding and decoding data to and from bytes.
+
+```python
+from pydantic import EncoderProtocol
+
+class MyEncoder(EncoderProtocol):
+    @classmethod
+    def decode(cls, data: bytes) -> bytes:
+        return data
+    
+    @classmethod
+    def encode(cls, value: bytes) -> bytes:
+        return value
+    
+    @classmethod
+    def get_json_format(cls) -> str:
+        return 'my-encoder'
+```
+
+### EncodedBytes
+
+A bytes type that is encoded and decoded using the specified encoder.
+
+<ParamField path="encoder" type="type[EncoderProtocol]">
+  The encoder to use for encoding/decoding
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, EncodedBytes, EncoderProtocol
+
+class MyEncoder(EncoderProtocol):
+    @classmethod
+    def decode(cls, data: bytes) -> bytes:
+        return data[13:]
+    
+    @classmethod
+    def encode(cls, value: bytes) -> bytes:
+        return b'**encoded**: ' + value
+    
+    @classmethod
+    def get_json_format(cls) -> str:
+        return 'my-encoder'
+
+MyEncodedBytes = Annotated[bytes, EncodedBytes(encoder=MyEncoder)]
+
+class Model(BaseModel):
+    my_encoded_bytes: MyEncodedBytes
+
+m = Model(my_encoded_bytes=b'**encoded**: some bytes')
+print(m.my_encoded_bytes)
+# b'some bytes'
+```
+
+### EncodedStr
+
+A str type that is encoded and decoded using the specified encoder.
+
+<ParamField path="encoder" type="type[EncoderProtocol]">
+  The encoder to use for encoding/decoding
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, EncodedStr, EncoderProtocol
+
+MyEncodedStr = Annotated[str, EncodedStr(encoder=MyEncoder)]
+
+class Model(BaseModel):
+    my_encoded_str: MyEncodedStr
+```
+
+### Base64Encoder
+
+Standard (non-URL-safe) Base64 encoder.
+
+```python
+from pydantic import Base64Encoder
+
+encoded = Base64Encoder.encode(b'hello')
+decoded = Base64Encoder.decode(encoded)
+```
+
+### Base64UrlEncoder
+
+URL-safe Base64 encoder.
+
+```python
+from pydantic import Base64UrlEncoder
+
+encoded = Base64UrlEncoder.encode(b'hello')
+decoded = Base64UrlEncoder.decode(encoded)
+```
+
+### Base64Bytes
+
+A bytes type that is encoded and decoded using the standard (non-URL-safe) base64 encoder.
+
+```python
+from pydantic import Base64Bytes, BaseModel
+
+class Model(BaseModel):
+    base64_bytes: Base64Bytes
+
+m = Model(base64_bytes=b'VGhpcyBpcyB0aGUgd2F5')
+print(m.base64_bytes)
+# b'This is the way'
+```
+
+### Base64Str
+
+A string type that is encoded and decoded using the standard (non-URL-safe) base64 encoder.
+
+```python
+from pydantic import Base64Str, BaseModel
+
+class Model(BaseModel):
+    base64_str: Base64Str
+
+m = Model(base64_str='VGhlc2UgYXJlbid0IHRoZSBkcm9pZHMgeW91J3JlIGxvb2tpbmcgZm9y')
+print(m.base64_str)
+# These aren't the droids you're looking for
+```
+
+### Base64UrlBytes
+
+A bytes type that is encoded and decoded using the URL-safe base64 encoder.
+
+```python
+from pydantic import Base64UrlBytes, BaseModel
+
+class Model(BaseModel):
+    base64url_bytes: Base64UrlBytes
+
+m = Model(base64url_bytes=b'SHc_dHc-TXc==')
+print(m)
+# base64url_bytes=b'Hw?tw>Mw'
+```
+
+### Base64UrlStr
+
+A str type that is encoded and decoded using the URL-safe base64 encoder.
+
+```python
+from pydantic import Base64UrlStr, BaseModel
+
+class Model(BaseModel):
+    base64url_str: Base64UrlStr
+
+m = Model(base64url_str='SHc_dHc-TXc==')
+print(m)
+# base64url_str='Hw?tw>Mw'
+```
+
+## Advanced Types
+
+### GetPydanticSchema
+
+A convenience class for creating an annotation that provides pydantic custom type hooks.
+
+<ParamField path="get_pydantic_core_schema" type="Callable | None">
+  Function to generate the core schema
+</ParamField>
+
+<ParamField path="get_pydantic_json_schema" type="Callable | None">
+  Function to generate the JSON schema
+</ParamField>
+
+```python
+from typing import Annotated, Any
+from pydantic import BaseModel, GetPydanticSchema
+
+HandleAsAny = GetPydanticSchema(lambda _s, h: h(Any))
+
+class Model(BaseModel):
+    x: Annotated[int, HandleAsAny]  # pydantic sees `x: Any`
+
+print(repr(Model(x='abc').x))
+# 'abc'
+```
+
+### Tag
+
+Provides a way to specify the expected tag to use for a case of a (callable) discriminated union.
+
+<ParamField path="tag" type="str">
+  The tag value for this union case
+</ParamField>
+
+```python
+from typing import Annotated, Union
+from pydantic import BaseModel, Tag
+
+class Cat(BaseModel):
+    type: str = 'cat'
+
+class Dog(BaseModel):
+    type: str = 'dog'
+
+Pet = Union[
+    Annotated[Cat, Tag('cat')],
+    Annotated[Dog, Tag('dog')]
+]
+```
+
+### Discriminator
+
+Provides a way to use a custom callable as the way to extract the value of a union discriminator.
+
+<ParamField path="discriminator" type="str | Callable">
+  The callable or field name for discriminating the type in a tagged union
+</ParamField>
+
+<ParamField path="custom_error_type" type="str | None">
+  Type to use in custom errors
+</ParamField>
+
+<ParamField path="custom_error_message" type="str | None">
+  Message to use in custom errors
+</ParamField>
+
+<ParamField path="custom_error_context" type="dict | None">
+  Context to use in custom errors
+</ParamField>
+
+```python
+from typing import Annotated, Any, Union
+from pydantic import BaseModel, Discriminator, Tag
+
+def get_discriminator_value(v: Any) -> str:
+    if isinstance(v, dict):
+        return v.get('type')
+    return getattr(v, 'type', None)
+
+Pet = Annotated[
+    Union[
+        Annotated[Cat, Tag('cat')],
+        Annotated[Dog, Tag('dog')]
+    ],
+    Discriminator(get_discriminator_value)
+]
+```
+
+### OnErrorOmit
+
+When used as an item in a list, this annotation omits the item from the iteration if there is any error validating it.
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, OnErrorOmit
+
+class Model(BaseModel):
+    items: list[Annotated[int, OnErrorOmit]]
+
+m = Model(items=[1, 'invalid', 3, 'also_invalid', 5])
+print(m.items)
+# [1, 3, 5]
+```
+
+### FailFast
+
+A `FailFast` annotation can be used to specify that validation should stop at the first error.
+
+<ParamField path="fail_fast" type="bool" default="True">
+  Whether to stop at the first validation error
+</ParamField>
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, FailFast
+
+class Model(BaseModel):
+    x: Annotated[list[int], FailFast()]
+
+# This will raise a single error for the first invalid value
+try:
+    obj = Model(x=[1, 2, 'a', 4, 5, 'b', 7, 8, 9, 'c'])
+except ValidationError as e:
+    print(e)
+    # Only shows error for 'a' at position 2
+```

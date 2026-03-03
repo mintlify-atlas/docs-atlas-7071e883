@@ -1,0 +1,609 @@
+---
+title: Migration Guide (V1 to V2)
+description: Complete guide for migrating from Pydantic V1 to V2 with real breaking changes, examples, and upgrade strategies
+---
+
+Pydantic V2 is a major release with significant performance improvements and new features, but it includes breaking changes. This guide will help you migrate your code successfully.
+
+## Quick Start
+
+<Steps>
+
+<Step title="Install Pydantic V2">
+  ```bash
+  pip install -U pydantic
+  ```
+</Step>
+
+<Step title="Use the migration tool">
+  ```bash
+  pip install bump-pydantic
+  bump-pydantic /path/to/your/code
+  ```
+</Step>
+
+<Step title="Test and fix remaining issues">
+  Review the changes and address any issues the tool couldn't fix automatically.
+</Step>
+
+</Steps>
+
+## Using the Migration Tool
+
+The `bump-pydantic` tool automatically updates most V1 code to V2:
+
+```bash
+# Install the tool
+pip install bump-pydantic
+
+# Run on your project
+cd /path/to/your/project
+bump-pydantic my_package
+```
+
+## Continue Using V1 Features
+
+If you need more time to migrate, Pydantic V2 includes V1 compatibility:
+
+```python
+# Import from pydantic.v1 instead
+from pydantic.v1 import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+```
+
+<Warning>
+**Python 3.14 Compatibility:** Pydantic V1 is not compatible with Python 3.14 and greater. You must migrate to V2 to use newer Python versions.
+</Warning>
+
+## Major Breaking Changes
+
+### Method Renames
+
+Many `BaseModel` methods have been renamed with a `model_` prefix:
+
+| Pydantic V1 | Pydantic V2 |
+|-------------|-------------|
+| `dict()` | `model_dump()` |
+| `json()` | `model_dump_json()` |
+| `parse_obj()` | `model_validate()` |
+| `parse_raw()` | `model_validate_json()` |
+| `parse_file()` | ❌ Removed (load data manually) |
+| `construct()` | `model_construct()` |
+| `copy()` | `model_copy()` |
+| `schema()` | `model_json_schema()` |
+| `update_forward_refs()` | `model_rebuild()` |
+
+**Migration Example:**
+
+<CodeGroup>
+
+```python V1 Code
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+user = User(name='John', age=30)
+
+# V1 methods
+data = user.dict()
+json_str = user.json()
+user2 = User.parse_obj({'name': 'Jane', 'age': 25})
+```
+
+```python V2 Code
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+user = User(name='John', age=30)
+
+# V2 methods
+data = user.model_dump()
+json_str = user.model_dump_json()
+user2 = User.model_validate({'name': 'Jane', 'age': 25})
+```
+
+</CodeGroup>
+
+### Configuration Changes
+
+Configuration moved from a nested `Config` class to `model_config` dict:
+
+<CodeGroup>
+
+```python V1 Config
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    email: str
+    
+    class Config:
+        str_strip_whitespace = True
+        validate_assignment = True
+```
+
+```python V2 Config
+from pydantic import BaseModel, ConfigDict
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+    )
+    
+    name: str
+    email: str
+```
+
+</CodeGroup>
+
+### Config Options Renamed
+
+| V1 Config | V2 Config |
+|-----------|----------|
+| `allow_mutation` | `frozen` (inverse) |
+| `allow_population_by_field_name` | `populate_by_name` |
+| `anystr_lower` | `str_to_lower` |
+| `anystr_strip_whitespace` | `str_strip_whitespace` |
+| `anystr_upper` | `str_to_upper` |
+| `orm_mode` | `from_attributes` |
+| `schema_extra` | `json_schema_extra` |
+| `validate_all` | `validate_default` |
+
+**Example:**
+
+```python
+# V1
+class Config:
+    orm_mode = True
+    allow_mutation = False
+
+# V2
+model_config = ConfigDict(
+    from_attributes=True,
+    frozen=True,  # Note: inverse of allow_mutation
+)
+```
+
+### Validators: @validator → @field_validator
+
+<CodeGroup>
+
+```python V1 Validator
+from pydantic import BaseModel, validator
+
+class User(BaseModel):
+    name: str
+    age: int
+    
+    @validator('age')
+    def age_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError('must be positive')
+        return v
+```
+
+```python V2 Field Validator
+from pydantic import BaseModel, field_validator
+
+class User(BaseModel):
+    name: str
+    age: int
+    
+    @field_validator('age')
+    @classmethod
+    def age_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError('must be positive')
+        return v
+```
+
+</CodeGroup>
+
+<Tip>
+**Key differences:**
+- Import from `field_validator` instead of `validator`
+- The `@classmethod` decorator is now required
+- Better type hints are recommended
+</Tip>
+
+### Root Validators: @root_validator → @model_validator
+
+<CodeGroup>
+
+```python V1 Root Validator
+from pydantic import BaseModel, root_validator
+
+class DateRange(BaseModel):
+    start: str
+    end: str
+    
+    @root_validator
+    def check_dates(cls, values):
+        if values.get('start') >= values.get('end'):
+            raise ValueError('start must be before end')
+        return values
+```
+
+```python V2 Model Validator
+from pydantic import BaseModel, model_validator
+from typing import Self
+
+class DateRange(BaseModel):
+    start: str
+    end: str
+    
+    @model_validator(mode='after')
+    def check_dates(self) -> Self:
+        if self.start >= self.end:
+            raise ValueError('start must be before end')
+        return self
+```
+
+</CodeGroup>
+
+<Warning>
+**Important:** In V2 `mode='after'`, the validator receives the model instance, not a dict of values.
+</Warning>
+
+### Field Changes
+
+Several `Field` parameters were removed or renamed:
+
+| V1 Parameter | V2 Parameter |
+|--------------|-------------|
+| `min_items` | `min_length` |
+| `max_items` | `max_length` |
+| `regex` | `pattern` |
+| `allow_mutation` | `frozen` |
+| `const` | ❌ Use `Literal` instead |
+
+**Example:**
+
+```python
+# V1
+from pydantic import BaseModel, Field
+
+class Product(BaseModel):
+    tags: list[str] = Field(min_items=1, max_items=5)
+    sku: str = Field(regex=r'^[A-Z]{3}\d{3}$')
+
+# V2
+from pydantic import BaseModel, Field
+
+class Product(BaseModel):
+    tags: list[str] = Field(min_length=1, max_length=5)
+    sku: str = Field(pattern=r'^[A-Z]{3}\d{3}$')
+```
+
+### GenericModel Removed
+
+No more `GenericModel` - use `BaseModel` directly with `Generic`:
+
+<CodeGroup>
+
+```python V1 Generic
+from typing import Generic, TypeVar
+from pydantic.generics import GenericModel
+
+T = TypeVar('T')
+
+class Response(GenericModel, Generic[T]):
+    data: T
+    status: int
+```
+
+```python V2 Generic
+from typing import Generic, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar('T')
+
+class Response(BaseModel, Generic[T]):
+    data: T
+    status: int
+```
+
+</CodeGroup>
+
+### Root Models
+
+Custom root types now use `RootModel`:
+
+<CodeGroup>
+
+```python V1 Root Model
+from pydantic import BaseModel
+
+class MyList(BaseModel):
+    __root__: list[int]
+
+ml = MyList(__root__=[1, 2, 3])
+print(ml.__root__)
+# [1, 2, 3]
+```
+
+```python V2 Root Model
+from pydantic import RootModel
+
+class MyList(RootModel[list[int]]):
+    pass
+
+ml = MyList([1, 2, 3])
+print(ml.root)
+# [1, 2, 3]
+```
+
+</CodeGroup>
+
+### Optional Fields Behavior
+
+**Breaking Change:** `Optional[T]` fields are now required by default:
+
+```python
+from typing import Optional
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    nickname: Optional[str]  # Required in V2! Can be None.
+    age: Optional[int] = None  # Optional with default
+
+# V2 behavior
+User(name='John', nickname=None)  # Valid
+User(name='John')  # ValidationError: nickname is required
+User(name='John', nickname=None, age=25)  # Valid
+```
+
+<Warning>
+**V1 vs V2:** In V1, `Optional[str]` meant "optional field with default `None`". In V2, it means "required field that can be `None`".
+</Warning>
+
+### Type Coercion Changes
+
+Float to int conversion is stricter:
+
+```python
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    count: int
+
+# V1: Accepted any float
+Model(count=10.5)  # Worked in V1, count=10
+
+# V2: Only accepts floats with zero decimal part
+Model(count=10.0)  # Works, count=10
+Model(count=10.5)  # ValidationError in V2
+```
+
+### Union Behavior Changes
+
+V2 uses "smart" union validation by default:
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class Model(BaseModel):
+    value: Union[int, str]
+
+# V1: Left-to-right, first match wins
+m1 = Model(value='123')  # V1: value=123 (int)
+
+# V2: Smart mode preserves input type when possible
+m2 = Model(value='123')  # V2: value='123' (str)
+```
+
+To get V1 behavior, use `union_mode='left_to_right'`:
+
+```python
+from typing import Union
+from pydantic import BaseModel, Field
+
+class Model(BaseModel):
+    value: Union[int, str] = Field(union_mode='left_to_right')
+
+m = Model(value='123')  # value=123 (int)
+```
+
+### Removed Features
+
+#### Constrained Types
+
+<CodeGroup>
+
+```python V1 Constrained
+from pydantic import ConstrainedInt, BaseModel
+
+class MyInt(ConstrainedInt):
+    ge = 0
+    le = 100
+
+class Model(BaseModel):
+    score: MyInt
+```
+
+```python V2 Annotated
+from typing import Annotated
+from pydantic import BaseModel, Field
+
+MyInt = Annotated[int, Field(ge=0, le=100)]
+
+class Model(BaseModel):
+    score: MyInt
+```
+
+</CodeGroup>
+
+#### JSON Encoders
+
+`json_encoders` config is deprecated. Use `@field_serializer` instead:
+
+<CodeGroup>
+
+```python V1 json_encoders
+from datetime import datetime
+from pydantic import BaseModel
+
+class Event(BaseModel):
+    timestamp: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.strftime('%Y-%m-%d')
+        }
+```
+
+```python V2 field_serializer
+from datetime import datetime
+from pydantic import BaseModel, field_serializer
+
+class Event(BaseModel):
+    timestamp: datetime
+    
+    @field_serializer('timestamp')
+    def serialize_timestamp(self, v: datetime, _info):
+        return v.strftime('%Y-%m-%d')
+```
+
+</CodeGroup>
+
+### BaseSettings Moved
+
+`BaseSettings` is now in a separate package:
+
+```bash
+pip install pydantic-settings
+```
+
+```python
+# V1
+from pydantic import BaseSettings
+
+# V2
+from pydantic_settings import BaseSettings
+```
+
+## TypeAdapter for Non-Models
+
+Replaces `parse_obj_as`:
+
+<CodeGroup>
+
+```python V1 parse_obj_as
+from pydantic import parse_obj_as
+
+result = parse_obj_as(list[int], ['1', '2', '3'])
+print(result)
+# [1, 2, 3]
+```
+
+```python V2 TypeAdapter
+from pydantic import TypeAdapter
+
+adapter = TypeAdapter(list[int])
+result = adapter.validate_python(['1', '2', '3'])
+print(result)
+# [1, 2, 3]
+```
+
+</CodeGroup>
+
+## Performance Improvements in V2
+
+Pydantic V2 is significantly faster than V1:
+
+- **Rust core:** Validation is 5-50x faster depending on use case
+- **JSON parsing:** Built-in JSON parsing is much faster
+- **Serialization:** 2-10x faster serialization
+- **Schema generation:** Faster JSON schema generation
+
+## Migration Checklist
+
+- [ ] Install `bump-pydantic` and run it on your codebase
+- [ ] Update method calls: `dict()` → `model_dump()`, etc.
+- [ ] Move `Config` class to `model_config` dict
+- [ ] Rename config options (e.g., `orm_mode` → `from_attributes`)
+- [ ] Update validators: `@validator` → `@field_validator`
+- [ ] Update root validators: `@root_validator` → `@model_validator`
+- [ ] Replace `GenericModel` with `BaseModel` + `Generic`
+- [ ] Update `__root__` models to use `RootModel`
+- [ ] Fix `Optional` field defaults
+- [ ] Replace `ConstrainedInt/Str` with `Annotated` + `Field`
+- [ ] Move `BaseSettings` to `pydantic-settings`
+- [ ] Test float-to-int conversions
+- [ ] Test union validation behavior
+- [ ] Run your test suite
+
+## Common Migration Issues
+
+<Accordion title="Issue: Optional fields now required">
+
+**Problem:**
+```python
+class User(BaseModel):
+    nickname: Optional[str]  # Was optional in V1, required in V2
+```
+
+**Solution:**
+```python
+class User(BaseModel):
+    nickname: Optional[str] = None  # Explicitly set default
+```
+
+</Accordion>
+
+<Accordion title="Issue: ValidationError format changed">
+
+**Problem:** Code parsing `ValidationError` structure breaks
+
+**Solution:**
+```python
+try:
+    model = MyModel(**data)
+except ValidationError as e:
+    # Use .errors() method for structured access
+    for error in e.errors(include_url=False):
+        print(f"{error['loc']}: {error['msg']}")
+```
+
+</Accordion>
+
+<Accordion title="Issue: Model equality behavior changed">
+
+**Problem:** Models no longer equal to dicts
+
+```python
+# V1: This worked
+model = User(name='John', age=30)
+assert model == {'name': 'John', 'age': 30}  # True in V1
+
+# V2: Must compare to dict explicitly
+assert model.model_dump() == {'name': 'John', 'age': 30}
+```
+
+</Accordion>
+
+## Getting Help
+
+If you encounter issues during migration:
+
+1. Check the [Pydantic V2 Documentation](https://docs.pydantic.dev)
+2. Search [GitHub Issues](https://github.com/pydantic/pydantic/issues)
+3. Ask on [GitHub Discussions](https://github.com/pydantic/pydantic/discussions)
+4. Report bugs with the `bug V2` label
+
+## See Also
+
+- [Full Migration Documentation](/guides/migration-guide)
+- [Pydantic V2 Release Notes](https://docs.pydantic.dev/latest/changelog/)
+- [Performance Tips](/guides/performance)

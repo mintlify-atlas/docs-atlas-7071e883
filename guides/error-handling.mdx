@@ -1,0 +1,563 @@
+---
+title: Error Handling
+description: Complete guide to handling ValidationError, understanding error messages, and creating custom validation errors
+---
+
+Pydantic provides comprehensive error handling to help you understand and respond to validation failures in your applications.
+
+## ValidationError Basics
+
+When validation fails, Pydantic raises a `ValidationError` containing detailed information about what went wrong:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    name: str
+    age: int
+    email: str
+
+try:
+    User(name='John', age='not-a-number', email='invalid')
+except ValidationError as e:
+    print(e)
+```
+
+**Output:**
+```
+2 validation errors for User
+age
+  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='not-a-number', input_type=str]
+email
+  value is not a valid email address: An email address must have an @-sign. [type=value_error, input_value='invalid', input_type=str]
+```
+
+## Understanding Error Structure
+
+Access structured error information programmatically:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Product(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+try:
+    Product(name=123, price='invalid', quantity=-5)
+except ValidationError as e:
+    errors = e.errors()
+    for error in errors:
+        print(f"Field: {error['loc']}")
+        print(f"Error Type: {error['type']}")
+        print(f"Message: {error['msg']}")
+        print(f"Input: {error['input']}")
+        print("---")
+```
+
+**Output:**
+```
+Field: ('name',)
+Error Type: string_type
+Message: Input should be a valid string
+Input: 123
+---
+Field: ('price',)
+Error Type: float_parsing
+Message: Input should be a valid number, unable to parse string as a number
+Input: invalid
+---
+```
+
+### Error Dictionary Fields
+
+Each error contains:
+
+<Steps>
+
+<Step title="loc (Location)">
+  Tuple indicating where the error occurred (field path for nested models)
+</Step>
+
+<Step title="type (Error Type)">
+  Machine-readable error code (e.g., `'int_parsing'`, `'missing'`)
+</Step>
+
+<Step title="msg (Message)">
+  Human-readable error description
+</Step>
+
+<Step title="input (Input Value)">
+  The actual value that failed validation
+</Step>
+
+<Step title="ctx (Context)">
+  Additional context information (optional, varies by error type)
+</Step>
+
+</Steps>
+
+## Common Error Types
+
+### Missing Field Errors
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    username: str
+    email: str
+
+try:
+    User(username='john')  # email is missing
+except ValidationError as e:
+    print(e)
+    # 1 validation error for User
+    # email
+    #   Field required [type=missing, input_value={'username': 'john'}, input_type=dict]
+```
+
+### Type Errors
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Settings(BaseModel):
+    timeout: int
+    enabled: bool
+    threshold: float
+
+try:
+    Settings(timeout='60', enabled='yes', threshold='invalid')
+except ValidationError as e:
+    for error in e.errors():
+        print(f"{error['loc'][0]}: {error['type']}")
+    # timeout: int_parsing
+    # enabled: bool_parsing
+    # threshold: float_parsing
+```
+
+### Constraint Errors
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+
+class Product(BaseModel):
+    name: str = Field(min_length=3, max_length=50)
+    price: float = Field(gt=0)
+    quantity: int = Field(ge=0, le=1000)
+
+try:
+    Product(name='AB', price=-10, quantity=1500)
+except ValidationError as e:
+    for error in e.errors():
+        print(f"{error['loc'][0]}: {error['type']} - {error['msg']}")
+    # name: string_too_short - String should have at least 3 characters
+    # price: greater_than - Input should be greater than 0
+    # quantity: less_than_equal - Input should be less than or equal to 1000
+```
+
+## Raising Custom Validation Errors
+
+Raise `ValueError` or `AssertionError` in validators:
+
+```python
+from pydantic import BaseModel, field_validator, ValidationError
+
+class Account(BaseModel):
+    username: str
+    password: str
+    
+    @field_validator('username')
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        if not v.isalnum():
+            raise ValueError('must contain only alphanumeric characters')
+        return v
+    
+    @field_validator('password')
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('must be at least 8 characters')
+        if not any(char.isdigit() for char in v):
+            raise ValueError('must contain at least one digit')
+        if not any(char.isupper() for char in v):
+            raise ValueError('must contain at least one uppercase letter')
+        return v
+
+try:
+    Account(username='john@doe', password='weak')
+except ValidationError as e:
+    print(e)
+    # 2 validation errors for Account
+    # username
+    #   Value error, must contain only alphanumeric characters
+    # password
+    #   Value error, must be at least 8 characters
+```
+
+### Using AssertionError
+
+```python
+from pydantic import BaseModel, field_validator, ValidationError
+
+class Range(BaseModel):
+    start: int
+    end: int
+    
+    @field_validator('end')
+    @classmethod
+    def end_greater_than_start(cls, v: int, info) -> int:
+        if 'start' in info.data:
+            assert v > info.data['start'], 'end must be greater than start'
+        return v
+
+try:
+    Range(start=10, end=5)
+except ValidationError as e:
+    print(e.errors()[0]['type'])
+    # assertion_error
+```
+
+<Tip>
+**ValueError vs AssertionError:** Both work, but `ValueError` is preferred for validation logic. The error type will be `'value_error'` for `ValueError` and `'assertion_error'` for `AssertionError`.
+</Tip>
+
+## Error Messages Customization
+
+Provide custom error messages:
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+
+class User(BaseModel):
+    age: int = Field(ge=0, le=120, description='Age in years')
+    
+try:
+    User(age=150)
+except ValidationError as e:
+    print(e)
+    # 1 validation error for User
+    # age
+    #   Input should be less than or equal to 120
+```
+
+### Custom Error Messages with PydanticCustomError
+
+```python
+from pydantic_core import PydanticCustomError
+from pydantic import BaseModel, field_validator
+
+class User(BaseModel):
+    username: str
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if len(v) < 3:
+            raise PydanticCustomError(
+                'username_too_short',
+                'Username {username} is too short. Minimum length is 3.',
+                {'username': v}
+            )
+        return v
+
+try:
+    User(username='ab')
+except Exception as e:
+    print(e)
+```
+
+## Handling Nested Model Errors
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Address(BaseModel):
+    street: str
+    city: str
+    postal_code: str
+
+class Company(BaseModel):
+    name: str
+    address: Address
+
+class Employee(BaseModel):
+    name: str
+    company: Company
+
+try:
+    Employee(
+        name='John',
+        company={
+            'name': 'TechCorp',
+            'address': {
+                'street': '123 Main St',
+                'city': 'Boston'
+                # postal_code is missing
+            }
+        }
+    )
+except ValidationError as e:
+    for error in e.errors():
+        print(f"Location: {' -> '.join(str(loc) for loc in error['loc'])}")
+        print(f"Message: {error['msg']}")
+    # Location: company -> address -> postal_code
+    # Message: Field required
+```
+
+## Error Filtering and Presentation
+
+### Exclude URLs from Errors
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    name: str
+    age: int
+
+try:
+    User(name='John', age='invalid')
+except ValidationError as e:
+    # Exclude URLs from error output
+    errors = e.errors(include_url=False)
+    print(errors)
+```
+
+### Format for JSON APIs
+
+```python
+import json
+from pydantic import BaseModel, ValidationError
+
+class ApiRequest(BaseModel):
+    endpoint: str
+    method: str
+    timeout: int
+
+try:
+    ApiRequest(endpoint='/api/users', method='INVALID', timeout='not-a-number')
+except ValidationError as e:
+    # Convert to JSON for API responses
+    error_response = {
+        'status': 'error',
+        'errors': e.errors(include_url=False)
+    }
+    print(json.dumps(error_response, indent=2))
+```
+
+## Catching Specific Error Types
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Config(BaseModel):
+    timeout: int
+    retries: int
+
+try:
+    Config(timeout='invalid', retries=3)
+except ValidationError as e:
+    # Check for specific error types
+    for error in e.errors():
+        if error['type'] == 'int_parsing':
+            field = error['loc'][0]
+            print(f"Invalid integer for {field}: {error['input']}")
+        elif error['type'] == 'missing':
+            field = error['loc'][0]
+            print(f"Required field {field} is missing")
+```
+
+## Error Context
+
+Some errors provide additional context:
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+
+class Score(BaseModel):
+    value: int = Field(ge=0, le=100, multiple_of=5)
+
+try:
+    Score(value=73)
+except ValidationError as e:
+    error = e.errors()[0]
+    print(f"Type: {error['type']}")
+    print(f"Context: {error.get('ctx')}")
+    # Type: multiple_of
+    # Context: {'multiple_of': 5}
+```
+
+<Accordion title="Example: Advanced Error Handling Pattern">
+
+```python
+from typing import Dict, List, Any
+from pydantic import BaseModel, ValidationError
+import logging
+
+logger = logging.getLogger(__name__)
+
+class ErrorHandler:
+    """Centralized error handling for validation errors."""
+    
+    @staticmethod
+    def format_errors(e: ValidationError) -> List[Dict[str, Any]]:
+        """Format validation errors for API response."""
+        formatted = []
+        for error in e.errors(include_url=False):
+            formatted.append({
+                'field': '.'.join(str(loc) for loc in error['loc']),
+                'message': error['msg'],
+                'type': error['type'],
+                'input': str(error.get('input', ''))
+            })
+        return formatted
+    
+    @staticmethod
+    def log_validation_error(model_name: str, e: ValidationError) -> None:
+        """Log validation errors."""
+        logger.warning(
+            f"Validation failed for {model_name}: "
+            f"{e.error_count()} error(s)"
+        )
+        for error in e.errors():
+            logger.debug(f"  - {error['loc']}: {error['msg']}")
+    
+    @staticmethod
+    def get_user_friendly_message(e: ValidationError) -> str:
+        """Generate user-friendly error message."""
+        error_count = e.error_count()
+        if error_count == 1:
+            error = e.errors()[0]
+            return f"Invalid {error['loc'][0]}: {error['msg']}"
+        else:
+            return f"Validation failed with {error_count} errors"
+
+# Usage
+class UserRegistration(BaseModel):
+    username: str
+    email: str
+    age: int
+
+try:
+    UserRegistration(username='', email='invalid', age='not-a-number')
+except ValidationError as e:
+    # Log the error
+    ErrorHandler.log_validation_error('UserRegistration', e)
+    
+    # Get API response
+    api_response = {
+        'success': False,
+        'message': ErrorHandler.get_user_friendly_message(e),
+        'errors': ErrorHandler.format_errors(e)
+    }
+    print(api_response)
+```
+
+</Accordion>
+
+## Model-Level Error Handling
+
+```python
+from pydantic import BaseModel, model_validator, ValidationError
+from typing import Self
+
+class DateRange(BaseModel):
+    start_date: str
+    end_date: str
+    
+    @model_validator(mode='after')
+    def validate_date_range(self) -> Self:
+        if self.start_date >= self.end_date:
+            raise ValueError(
+                f'start_date ({self.start_date}) must be before '
+                f'end_date ({self.end_date})'
+            )
+        return self
+
+try:
+    DateRange(start_date='2024-12-31', end_date='2024-01-01')
+except ValidationError as e:
+    print(e)
+    # 1 validation error for DateRange
+    #   Value error, start_date (2024-12-31) must be before end_date (2024-01-01)
+```
+
+## Programmatic Error Analysis
+
+```python
+from pydantic import BaseModel, ValidationError, Field
+from typing import Dict, Set
+
+class DataValidator:
+    """Analyze validation errors."""
+    
+    @staticmethod
+    def get_error_fields(e: ValidationError) -> Set[str]:
+        """Get all fields that had errors."""
+        return {error['loc'][0] for error in e.errors()}
+    
+    @staticmethod
+    def get_errors_by_type(e: ValidationError) -> Dict[str, int]:
+        """Count errors by type."""
+        error_types = {}
+        for error in e.errors():
+            error_type = error['type']
+            error_types[error_type] = error_types.get(error_type, 0) + 1
+        return error_types
+    
+    @staticmethod
+    def has_missing_fields(e: ValidationError) -> bool:
+        """Check if any required fields are missing."""
+        return any(error['type'] == 'missing' for error in e.errors())
+
+class Product(BaseModel):
+    name: str
+    price: float = Field(gt=0)
+    quantity: int = Field(ge=0)
+
+try:
+    Product(name=123, price=-10)
+except ValidationError as e:
+    print("Error fields:", DataValidator.get_error_fields(e))
+    print("Errors by type:", DataValidator.get_errors_by_type(e))
+    print("Has missing fields:", DataValidator.has_missing_fields(e))
+    # Error fields: {'name', 'price', 'quantity'}
+    # Errors by type: {'string_type': 1, 'greater_than': 1, 'missing': 1}
+    # Has missing fields: True
+```
+
+## Best Practices
+
+1. **Always catch ValidationError** - Don't let validation errors crash your application
+
+2. **Log validation errors** - Track patterns of invalid data for debugging
+
+3. **Provide user-friendly messages** - Transform technical errors into helpful guidance
+
+4. **Use error types for conditional logic** - Handle different error types appropriately
+
+5. **Include context in custom errors** - Help users understand what went wrong
+
+6. **Test error scenarios** - Ensure your error handling code works correctly
+
+## Common Error Type Reference
+
+| Error Type | Description | Example |
+|------------|-------------|----------|
+| `missing` | Required field not provided | `User(name='John')` when email required |
+| `int_parsing` | Cannot parse value as integer | `age='not-a-number'` |
+| `string_type` | Expected string, got different type | `name=123` |
+| `value_error` | Custom validator raised ValueError | Custom business logic violation |
+| `assertion_error` | Assertion failed in validator | `assert condition` failed |
+| `greater_than` | Value not greater than constraint | `Field(gt=0)` with value `-5` |
+| `string_too_short` | String shorter than min_length | `Field(min_length=5)` with `'ab'` |
+
+## See Also
+
+- [Validation Errors Documentation](/guides/error-handling)
+- [Custom Validators Guide](/guides/custom-validators)
+- [Error Handling API](/api/errors)

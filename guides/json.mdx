@@ -1,0 +1,394 @@
+---
+title: JSON Handling
+description: Complete guide to JSON parsing, validation, serialization, and custom encoders in Pydantic
+---
+
+Pydantic provides powerful built-in JSON handling capabilities that offer significant performance improvements while maintaining flexibility for customization.
+
+## JSON Parsing and Validation
+
+Pydantic's JSON parsing is built on top of [`jiter`](https://docs.rs/jiter/latest/jiter/), a fast Rust-based JSON parser that provides excellent performance.
+
+### Basic JSON Validation
+
+Use `model_validate_json()` to parse and validate JSON data directly:
+
+```python
+from datetime import date
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+class Event(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    when: date
+    where: tuple[int, int]
+
+json_data = '{"when": "1987-01-28", "where": [51, -1]}'
+print(Event.model_validate_json(json_data))
+# Output: when=datetime.date(1987, 1, 28) where=(51, -1)
+```
+
+<Tip>
+**Performance Tip:** Always use `model_validate_json()` instead of `model_validate(json.loads(...))` for better performance. JSON is parsed and validated internally in a single pass.
+</Tip>
+
+### Why model_validate_json is Faster
+
+<Steps>
+
+<Step title="Single-pass processing">
+  `model_validate_json()` performs parsing and validation in one step, avoiding intermediate Python dict creation.
+</Step>
+
+<Step title="Rust-powered performance">
+  The underlying `jiter` parser is written in Rust, providing significant speed improvements over Python's `json` module.
+</Step>
+
+<Step title="Type-aware parsing">
+  Pydantic knows the expected types when parsing JSON, allowing for optimized conversion paths.
+</Step>
+
+</Steps>
+
+### Strict Mode JSON Parsing
+
+JSON parsing automatically handles type coercion that's appropriate for JSON data:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True)
+    
+    count: int
+    active: bool
+
+# This works - JSON has no native date/tuple types
+m = StrictModel.model_validate_json('{"count": 42, "active": true}')
+print(m)
+# Output: count=42 active=True
+
+# This fails - strict mode rejects non-int for regular validation
+try:
+    StrictModel.model_validate({'count': '42', 'active': True})
+except ValidationError as e:
+    print("Validation failed:", e)
+```
+
+## Partial JSON Parsing
+
+**Available in v2.7.0+**
+
+Pydantic supports parsing incomplete JSON, which is particularly useful for streaming LLM outputs:
+
+```python
+from pydantic_core import from_json
+from pydantic import BaseModel
+
+class Dog(BaseModel):
+    breed: str
+    name: str
+    friends: list[str]
+
+partial_json = '{"breed": "lab", "name": "fluffy", "friends": ["buddy", "spot"'
+
+# Parse what we have so far
+dog = Dog.model_validate(from_json(partial_json, allow_partial=True))
+print(dog)
+# Output: breed='lab' name='fluffy' friends=['buddy', 'spot']
+```
+
+<Warning>
+For partial JSON parsing to work reliably, all fields should have default values. Otherwise, you may get validation errors for missing required fields.
+</Warning>
+
+### Advanced Partial Parsing with Error Handling
+
+```python
+from typing import Annotated, Any, Optional
+import pydantic_core
+from pydantic import BaseModel, ValidationError, WrapValidator
+
+def default_on_error(v, handler) -> Any:
+    """Return default value if validation fails due to partial JSON."""
+    try:
+        return handler(v)
+    except ValidationError as exc:
+        if all(e['type'] == 'missing' for e in exc.errors()):
+            raise pydantic_core.PydanticUseDefault()
+        raise
+
+class NestedModel(BaseModel):
+    x: int
+    y: str
+
+class MyModel(BaseModel):
+    foo: Optional[str] = None
+    bar: Annotated[Optional[tuple[str, int]], WrapValidator(default_on_error)] = None
+    nested: Annotated[Optional[NestedModel], WrapValidator(default_on_error)] = None
+
+m = MyModel.model_validate(
+    pydantic_core.from_json('{"foo": "x", "bar": ["world",', allow_partial=True)
+)
+print(m)
+# Output: foo='x' bar=None nested=None
+```
+
+## JSON Serialization
+
+Convert models to JSON strings with `model_dump_json()`:
+
+```python
+from datetime import datetime
+from pydantic import BaseModel
+
+class Event(BaseModel):
+    timestamp: datetime
+    tags: tuple[str, ...]
+    metadata: dict[str, int]
+
+event = Event(
+    timestamp=datetime(2032, 6, 1, 12, 13, 14),
+    tags=('important', 'urgent'),
+    metadata={'priority': 1}
+)
+
+print(event.model_dump_json(indent=2))
+```
+
+**Output:**
+```json
+{
+  "timestamp": "2032-06-01T12:13:14",
+  "tags": [
+    "important",
+    "urgent"
+  ],
+  "metadata": {
+    "priority": 1
+  }
+}
+```
+
+### Serialization Options
+
+Control JSON output with various options:
+
+```python
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    username: str
+    email: str = Field(serialization_alias='email_address')
+    is_active: Optional[bool] = None
+    metadata: dict = {}
+
+user = User(username='john', email='john@example.com')
+
+# Use aliases in output
+print(user.model_dump_json(by_alias=True))
+# Output: {"username":"john","email_address":"john@example.com","is_active":null,"metadata":{}}
+
+# Exclude None values
+print(user.model_dump_json(exclude_none=True))
+# Output: {"username":"john","email":"john@example.com","metadata":{}}
+
+# Exclude specific fields
+print(user.model_dump_json(exclude={'metadata'}))
+# Output: {"username":"john","email":"john@example.com","is_active":null}
+```
+
+## Custom JSON Serialization
+
+Customize how specific fields are serialized using `@field_serializer`:
+
+```python
+from datetime import datetime, timedelta
+from pydantic import BaseModel, ConfigDict, field_serializer
+
+class SubDt(datetime):
+    pass
+
+class SubDelta(timedelta):
+    pass
+
+class Model(BaseModel):
+    timestamp: SubDt
+    duration: SubDelta
+    
+    @field_serializer('timestamp', when_used='json')
+    def serialize_timestamp(self, v: SubDt, _info):
+        return v.strftime('%a, %d %b %Y %H:%M:%S')
+    
+    model_config = ConfigDict(ser_json_timedelta='float')
+
+m = Model(
+    timestamp=SubDt(2032, 1, 1, 1, 1),
+    duration=SubDelta(hours=100)
+)
+
+print(m.model_dump_json())
+# Output: {"timestamp":"Thu, 01 Jan 2032 01:01:00","duration":360000.0}
+```
+
+### Custom Encoders for Special Types
+
+<Accordion title="Example: Custom UUID Encoding">
+
+```python
+from uuid import UUID
+from pydantic import BaseModel, field_serializer
+
+class Resource(BaseModel):
+    id: UUID
+    name: str
+    
+    @field_serializer('id')
+    def serialize_id(self, v: UUID, _info):
+        # Serialize UUID without hyphens
+        return v.hex
+
+resource = Resource(
+    id=UUID('ebcdab58-6eb8-46fb-a190-d07a33e9eac8'),
+    name='example'
+)
+
+print(resource.model_dump_json())
+# Output: {"id":"ebcdab586eb846fba190d07a33e9eac8","name":"example"}
+```
+
+</Accordion>
+
+## String Caching for Performance
+
+**Available in v2.7.0+**
+
+Configure how Python strings are cached during JSON parsing:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class CachedModel(BaseModel):
+    model_config = ConfigDict(
+        cache_strings=True  # Cache all strings (default)
+    )
+    
+    field1: str
+    field2: str
+
+class KeyOnlyCached(BaseModel):
+    model_config = ConfigDict(
+        cache_strings='keys'  # Cache only dict keys
+    )
+    
+    data: dict[str, str]
+
+class NoCaching(BaseModel):
+    model_config = ConfigDict(
+        cache_strings=False  # No caching
+    )
+    
+    field: str
+```
+
+<Tip>
+**When to disable caching:** If your data has very few repeated strings, disabling the cache with `cache_strings=False` may improve performance by avoiding cache lookup overhead.
+</Tip>
+
+## TypeAdapter for Non-Model Types
+
+Use `TypeAdapter` to work with JSON for types that aren't Pydantic models:
+
+```python
+from typing import TypeAdapter
+from pydantic import TypeAdapter
+
+# Validate and serialize lists
+adapter = TypeAdapter(list[int])
+data = adapter.validate_json('[1, "2", 3]')
+print(data)
+# Output: [1, 2, 3]
+
+json_str = adapter.dump_json([1, 2, 3])
+print(json_str)
+# Output: b'[1,2,3]'
+
+# Complex nested structures
+from datetime import datetime
+complex_adapter = TypeAdapter(dict[str, list[datetime]])
+
+json_data = '{"events": ["2032-01-01T00:00:00", "2032-01-02T00:00:00"]}'
+result = complex_adapter.validate_json(json_data)
+print(result)
+# Output: {'events': [datetime(2032, 1, 1, 0, 0), datetime(2032, 1, 2, 0, 0)]}
+```
+
+## Common JSON Patterns
+
+### Working with JSON Fields
+
+```python
+from pydantic import BaseModel, Json
+
+class Config(BaseModel):
+    settings: Json[dict[str, str]]
+    
+json_str = '{"settings": "{\\"theme\\": \\"dark\\", \\"lang\\": \\"en\\"}"}'
+config = Config.model_validate_json(json_str)
+print(config.settings)
+# Output: {'theme': 'dark', 'lang': 'en'}
+```
+
+### Handling Different JSON Formats
+
+<CodeGroup>
+
+```python Python - Compact JSON
+from pydantic import BaseModel
+
+class Data(BaseModel):
+    items: list[str]
+
+m = Data(items=['a', 'b', 'c'])
+print(m.model_dump_json())
+# Output: {"items":["a","b","c"]}
+```
+
+```python Python - Pretty JSON
+from pydantic import BaseModel
+
+class Data(BaseModel):
+    items: list[str]
+
+m = Data(items=['a', 'b', 'c'])
+print(m.model_dump_json(indent=2))
+# Output:
+# {
+#   "items": [
+#     "a",
+#     "b",
+#     "c"
+#   ]
+# }
+```
+
+</CodeGroup>
+
+## Best Practices
+
+1. **Use `model_validate_json()` for best performance** - Avoid the two-step `json.loads()` then `model_validate()` pattern
+
+2. **Enable partial parsing for streaming** - Useful for progressive validation of LLM outputs
+
+3. **Configure string caching appropriately** - Default `cache_strings=True` is optimal for most cases
+
+4. **Use field serializers for custom formats** - More maintainable than deprecated `json_encoders`
+
+5. **Leverage TypeAdapter for flexibility** - Works with any type, not just models
+
+## See Also
+
+- [Serialization Concepts](/concepts/serialization)
+- [Type Adapter Guide](/advanced/type-adapter)
+- [Field Serializers API](/api/functional-serializers)

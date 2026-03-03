@@ -1,0 +1,267 @@
+---
+title: Aliases
+description: AliasChoices, AliasPath, and AliasGenerator for field aliasing
+---
+
+The `pydantic.aliases` module provides support for field alias configurations, allowing you to specify alternative names for fields during validation and serialization.
+
+## AliasPath
+
+```python
+@dataclasses.dataclass
+class AliasPath:
+    path: list[int | str]
+    
+    def __init__(self, first_arg: str, *args: str | int) -> None
+```
+
+A data class used by `validation_alias` as a convenience to create aliases.
+
+`AliasPath` is used to specify a path through nested data structures to locate a field value.
+
+<ParamField path="first_arg" type="str" required>
+  The first element in the path.
+</ParamField>
+
+<ParamField path="args" type="str | int">
+  Additional path elements. Can be strings (for dictionary keys) or integers (for list indices).
+</ParamField>
+
+### Attributes
+
+<ResponseField name="path" type="list[int | str]">
+  A list of string or integer aliases representing the path through nested data.
+</ResponseField>
+
+### Methods
+
+#### convert_to_aliases
+
+```python
+def convert_to_aliases(self) -> list[str | int]
+```
+
+Converts arguments to a list of string or integer aliases.
+
+<ResponseField name="return" type="list[str | int]">
+  The list of aliases.
+</ResponseField>
+
+#### search_dict_for_path
+
+```python
+def search_dict_for_path(self, d: dict) -> Any
+```
+
+Searches a dictionary for the path specified by the alias.
+
+<ParamField path="d" type="dict" required>
+  The dictionary to search.
+</ParamField>
+
+<ResponseField name="return" type="Any">
+  The value at the specified path, or `PydanticUndefined` if the path is not found.
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import BaseModel, Field
+from pydantic.aliases import AliasPath
+
+class User(BaseModel):
+    username: str = Field(validation_alias=AliasPath('user', 'name'))
+    user_id: int = Field(validation_alias=AliasPath('user', 'id'))
+
+# Can validate from nested structure
+data = {
+    'user': {
+        'name': 'john_doe',
+        'id': 123
+    }
+}
+
+user = User.model_validate(data)
+print(user.username)  # 'john_doe'
+print(user.user_id)   # 123
+```
+
+## AliasChoices
+
+```python
+@dataclasses.dataclass
+class AliasChoices:
+    choices: list[str | AliasPath]
+    
+    def __init__(self, first_choice: str | AliasPath, *choices: str | AliasPath) -> None
+```
+
+A data class used by `validation_alias` as a convenience to create aliases.
+
+`AliasChoices` allows you to specify multiple alternative names or paths for a field, where the first available one will be used.
+
+<ParamField path="first_choice" type="str | AliasPath" required>
+  The first choice for the alias.
+</ParamField>
+
+<ParamField path="choices" type="str | AliasPath">
+  Additional alias choices.
+</ParamField>
+
+### Attributes
+
+<ResponseField name="choices" type="list[str | AliasPath]">
+  A list containing strings or `AliasPath` objects.
+</ResponseField>
+
+### Methods
+
+#### convert_to_aliases
+
+```python
+def convert_to_aliases(self) -> list[list[str | int]]
+```
+
+Converts arguments to a list of lists containing string or integer aliases.
+
+<ResponseField name="return" type="list[list[str | int]]">
+  The list of aliases.
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import BaseModel, Field
+from pydantic.aliases import AliasChoices, AliasPath
+
+class User(BaseModel):
+    # Try 'username' first, then 'user_name', then nested 'user.name'
+    username: str = Field(
+        validation_alias=AliasChoices(
+            'username',
+            'user_name',
+            AliasPath('user', 'name')
+        )
+    )
+
+# Works with any of the specified aliases
+user1 = User(username='john')
+user2 = User(user_name='jane')
+user3 = User(**{'user': {'name': 'bob'}})
+
+print(user1.username)  # 'john'
+print(user2.username)  # 'jane'
+print(user3.username)  # 'bob'
+```
+
+## AliasGenerator
+
+```python
+@dataclasses.dataclass
+class AliasGenerator:
+    alias: Callable[[str], str] | None = None
+    validation_alias: Callable[[str], str | AliasPath | AliasChoices] | None = None
+    serialization_alias: Callable[[str], str] | None = None
+```
+
+A data class used by `alias_generator` as a convenience to create various aliases.
+
+`AliasGenerator` allows you to programmatically generate aliases for all fields in a model based on callable functions.
+
+<ParamField path="alias" type="Callable[[str], str] | None" default="None">
+  A callable that takes a field name and returns an alias for it.
+</ParamField>
+
+<ParamField path="validation_alias" type="Callable[[str], str | AliasPath | AliasChoices] | None" default="None">
+  A callable that takes a field name and returns a validation alias for it.
+</ParamField>
+
+<ParamField path="serialization_alias" type="Callable[[str], str] | None" default="None">
+  A callable that takes a field name and returns a serialization alias for it.
+</ParamField>
+
+### Methods
+
+#### generate_aliases
+
+```python
+def generate_aliases(
+    self,
+    field_name: str
+) -> tuple[str | None, str | AliasPath | AliasChoices | None, str | None]
+```
+
+Generate `alias`, `validation_alias`, and `serialization_alias` for a field.
+
+<ParamField path="field_name" type="str" required>
+  The name of the field to generate aliases for.
+</ParamField>
+
+<ResponseField name="return" type="tuple[str | None, str | AliasPath | AliasChoices | None, str | None]">
+  A tuple of three aliases: (alias, validation_alias, serialization_alias).
+</ResponseField>
+
+### Example
+
+```python
+from pydantic import BaseModel, ConfigDict
+from pydantic.aliases import AliasGenerator
+
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    parts = string.split('_')
+    return parts[0] + ''.join(word.capitalize() for word in parts[1:])
+
+class User(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=AliasGenerator(
+            alias=to_camel,
+            serialization_alias=to_camel,
+        )
+    )
+    
+    user_id: int
+    user_name: str
+    email_address: str
+
+# Validate using snake_case or camelCase
+user = User(
+    userId=123,
+    userName='john_doe',
+    emailAddress='john@example.com'
+)
+
+print(user.model_dump(by_alias=True))
+# {
+#     'userId': 123,
+#     'userName': 'john_doe',
+#     'emailAddress': 'john@example.com'
+# }
+```
+
+### Common Alias Generators
+
+Here are some common alias generator patterns:
+
+```python
+def to_camel(string: str) -> str:
+    """snake_case -> camelCase"""
+    parts = string.split('_')
+    return parts[0] + ''.join(word.capitalize() for word in parts[1:])
+
+def to_pascal(string: str) -> str:
+    """snake_case -> PascalCase"""
+    return ''.join(word.capitalize() for word in string.split('_'))
+
+def to_kebab(string: str) -> str:
+    """snake_case -> kebab-case"""
+    return string.replace('_', '-')
+
+class Model(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=AliasGenerator(
+            validation_alias=to_camel,
+            serialization_alias=to_camel,
+        )
+    )
+```

@@ -1,0 +1,454 @@
+---
+title: Pydantic Dataclasses
+description: Enhanced dataclasses with automatic validation
+---
+
+Pydantic provides a drop-in replacement for Python's standard `dataclasses` that adds automatic validation. Pydantic dataclasses combine the simplicity of dataclasses with Pydantic's powerful validation features.
+
+## Overview
+
+Pydantic dataclasses are similar to standard dataclasses but with key enhancements:
+
+- Automatic type validation on initialization
+- Runtime type coercion
+- Custom validators and serializers
+- JSON schema generation
+- Compatible with standard dataclass features
+
+## Basic Usage
+
+Use the `@dataclass` decorator from Pydantic:
+
+```python
+from pydantic.dataclasses import dataclass
+
+@dataclass
+class User:
+    name: str
+    age: int
+    email: str
+
+# Automatic validation
+user = User(name='John', age='30', email='john@example.com')
+print(user)
+# User(name='John', age=30, email='john@example.com')
+print(user.age)  # 30 (converted from string)
+print(type(user.age))  # <class 'int'>
+```
+
+## Differences from Standard Dataclasses
+
+<Steps>
+
+### Validation on Initialization
+
+Pydantic dataclasses validate all fields when created:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import ValidationError
+
+@dataclass
+class Product:
+    name: str
+    price: float
+    quantity: int
+
+# Valid - types are coerced
+product = Product(name='Widget', price='19.99', quantity='5')
+print(product.price)  # 19.99 (float)
+
+# Invalid - raises ValidationError
+try:
+    Product(name='Widget', price='invalid', quantity=5)
+except ValidationError as e:
+    print(e)
+```
+
+### init Parameter Restriction
+
+Pydantic dataclasses require `init=False` (Pydantic provides its own `__init__`):
+
+```python
+from pydantic.dataclasses import dataclass
+
+@dataclass(init=False)  # Required for Pydantic
+class Example:
+    value: int
+```
+
+### Field Validation
+
+Use Pydantic's `Field` function for additional constraints:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import Field
+
+@dataclass
+class User:
+    name: str = Field(min_length=1, max_length=50)
+    age: int = Field(gt=0, lt=150)
+    email: str = Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+
+user = User(name='John', age=30, email='john@example.com')
+print(user)
+```
+
+</Steps>
+
+## Configuration
+
+Configure behavior using `ConfigDict`:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import ConfigDict, ValidationError
+
+@dataclass(config=ConfigDict(strict=True))
+class StrictData:
+    value: int
+
+# Strict mode - no type coercion
+try:
+    StrictData(value='123')
+except ValidationError as e:
+    print("Strict validation failed")
+
+# This works
+data = StrictData(value=123)
+print(data.value)  # 123
+```
+
+### Common Configuration Options
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import ConfigDict
+
+@dataclass(
+    config=ConfigDict(
+        validate_assignment=True,  # Validate on attribute changes
+        frozen=True,               # Make immutable
+        str_strip_whitespace=True, # Strip whitespace from strings
+        validate_default=True      # Validate default values
+    )
+)
+class ConfiguredData:
+    name: str
+    value: int = 0
+```
+
+## Using with Pydantic Fields
+
+Combine with Field for advanced validation:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import Field
+from typing import Optional
+
+@dataclass
+class Person:
+    name: str = Field(description="Person's full name")
+    age: int = Field(ge=0, le=150, description="Age in years")
+    email: Optional[str] = Field(None, alias="emailAddress")
+    salary: float = Field(gt=0, description="Annual salary")
+
+person = Person(
+    name='Alice',
+    age=30,
+    emailAddress='alice@example.com',
+    salary=50000.0
+)
+print(person)
+```
+
+## Nested Dataclasses
+
+Dataclasses can be nested and validated:
+
+```python
+from pydantic.dataclasses import dataclass
+from typing import List
+
+@dataclass
+class Address:
+    street: str
+    city: str
+    zipcode: str
+
+@dataclass
+class Company:
+    name: str
+    address: Address
+    employee_count: int
+
+@dataclass  
+class Employee:
+    name: str
+    company: Company
+
+# Nested validation
+employee = Employee(
+    name='John',
+    company={
+        'name': 'Acme Corp',
+        'address': {
+            'street': '123 Main St',
+            'city': 'Springfield',
+            'zipcode': '12345'
+        },
+        'employee_count': '100'
+    }
+)
+
+print(employee.company.address.city)  # 'Springfield'
+print(employee.company.employee_count)  # 100 (converted from string)
+```
+
+## Frozen Dataclasses
+
+Create immutable dataclasses:
+
+```python
+from pydantic.dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ImmutablePoint:
+    x: float
+    y: float
+
+point = ImmutablePoint(x=1.0, y=2.0)
+print(point)  # ImmutablePoint(x=1.0, y=2.0)
+
+# Attempting to modify raises an error
+try:
+    point.x = 3.0
+except AttributeError as e:
+    print("Cannot modify frozen dataclass")
+```
+
+## Validate Assignment
+
+Enable validation when attributes are modified:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import ConfigDict, ValidationError
+
+@dataclass(config=ConfigDict(validate_assignment=True))
+class ValidatedData:
+    value: int
+
+data = ValidatedData(value=10)
+print(data.value)  # 10
+
+# Validation on assignment
+data.value = '20'
+print(data.value)  # 20 (converted)
+
+# Invalid assignment raises error
+try:
+    data.value = 'invalid'
+except ValidationError as e:
+    print(e)
+```
+
+## Converting Stdlib Dataclasses
+
+Wrap existing dataclasses to add validation:
+
+```python
+from dataclasses import dataclass as stdlib_dataclass
+from pydantic.dataclasses import dataclass
+
+# Existing stdlib dataclass
+@stdlib_dataclass
+class ExistingData:
+    value: int
+    name: str
+
+# Wrap with Pydantic for validation
+@dataclass
+class ValidatedData(ExistingData):
+    pass
+
+# Now has validation
+data = ValidatedData(value='123', name='test')
+print(data.value)  # 123 (converted and validated)
+```
+
+## Default Values and Factories
+
+Use default values and factory functions:
+
+```python
+from pydantic.dataclasses import dataclass
+from typing import List
+from datetime import datetime
+
+@dataclass
+class Record:
+    name: str
+    tags: List[str] = None  # Converted to empty list
+    created_at: datetime = None
+    
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = []
+        if self.created_at is None:
+            self.created_at = datetime.now()
+
+record = Record(name='test')
+print(record.tags)  # []
+print(record.created_at)  # Current datetime
+```
+
+Or use Field with default_factory:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import Field
+from typing import List
+
+@dataclass
+class Container:
+    items: List[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+
+container = Container()
+print(container.items)  # []
+print(container.metadata)  # {}
+```
+
+## Slots Support
+
+Use slots for memory efficiency (Python 3.10+):
+
+```python
+from pydantic.dataclasses import dataclass
+import sys
+
+if sys.version_info >= (3, 10):
+    @dataclass(slots=True)
+    class EfficientData:
+        x: int
+        y: int
+        z: int
+    
+    data = EfficientData(x=1, y=2, z=3)
+```
+
+## Keyword-Only Fields
+
+Require keyword arguments (Python 3.10+):
+
+```python
+from pydantic.dataclasses import dataclass
+import sys
+
+if sys.version_info >= (3, 10):
+    @dataclass(kw_only=True)
+    class KeywordOnly:
+        name: str
+        value: int
+    
+    # Must use keyword arguments
+    data = KeywordOnly(name='test', value=42)
+    
+    # This raises TypeError
+    # data = KeywordOnly('test', 42)
+```
+
+## JSON Schema Generation
+
+Generate JSON schemas from dataclasses:
+
+```python
+from pydantic.dataclasses import dataclass
+from pydantic import TypeAdapter
+import json
+
+@dataclass
+class Product:
+    name: str
+    price: float
+    in_stock: bool
+
+# Get JSON schema via TypeAdapter
+ta = TypeAdapter(Product)
+schema = ta.json_schema()
+print(json.dumps(schema, indent=2))
+```
+
+## Rebuilding Dataclasses
+
+Rebuild schema when forward references are resolved:
+
+```python
+from pydantic.dataclasses import dataclass, rebuild_dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import List
+
+@dataclass
+class Container:
+    items: 'List[Item]'
+
+@dataclass
+class Item:
+    value: int
+
+# Rebuild after all types are defined
+rebuild_dataclass(Container, raise_errors=True)
+```
+
+## Checking if Pydantic Dataclass
+
+Determine if a class is a Pydantic dataclass:
+
+```python
+from pydantic.dataclasses import dataclass, is_pydantic_dataclass
+from dataclasses import dataclass as stdlib_dataclass
+
+@dataclass
+class PydanticData:
+    value: int
+
+@stdlib_dataclass
+class StdlibData:
+    value: int
+
+print(is_pydantic_dataclass(PydanticData))  # True
+print(is_pydantic_dataclass(StdlibData))    # False
+```
+
+## Best Practices
+
+<Accordion title="When to Use Dataclasses vs Models">
+  Use Pydantic dataclasses when:
+  - You need compatibility with stdlib dataclasses
+  - You prefer a simpler syntax without inheritance
+  - You're working with existing dataclass code
+  
+  Use BaseModel when:
+  - You need ORM integration
+  - You want more advanced features like JSON parsing methods
+  - You need complex validation logic
+</Accordion>
+
+<Accordion title="Performance Considerations">
+  Pydantic dataclasses have similar performance to BaseModel:
+  - Use `slots=True` for memory efficiency (Python 3.10+)
+  - Use `frozen=True` for immutable data
+  - Cache TypeAdapter instances for repeated validation
+</Accordion>
+
+<Accordion title="Validation Timing">
+  Remember that validation occurs:
+  - On initialization (always)
+  - On assignment (only if `validate_assignment=True`)
+  - Default values are validated only if `validate_default=True`
+</Accordion>

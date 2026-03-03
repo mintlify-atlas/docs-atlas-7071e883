@@ -1,0 +1,702 @@
+---
+title: TypeAdapter
+description: Complete API reference for Pydantic's TypeAdapter class
+---
+
+Type adapters provide a flexible way to perform validation and serialization based on a Python type.
+
+A `TypeAdapter` instance exposes some of the functionality from `BaseModel` instance methods for types that do not have such methods (such as dataclasses, primitive types, and more).
+
+## Class Definition
+
+```python
+class TypeAdapter(Generic[T])
+```
+
+## Type Parameters
+
+<ParamField path="T" type="TypeVar">
+The type associated with the TypeAdapter.
+</ParamField>
+
+## Constructor
+
+### `__init__`
+
+```python
+def __init__(
+    self,
+    type: Any,
+    *,
+    config: ConfigDict | None = None,
+    _parent_depth: int = 2,
+    module: str | None = None,
+) -> None
+```
+
+Create a new TypeAdapter instance.
+
+<ParamField path="type" type="Any">
+The type associated with the TypeAdapter.
+</ParamField>
+
+<ParamField path="config" type="ConfigDict | None">
+Configuration for the TypeAdapter, should be a dictionary conforming to `ConfigDict`.
+
+<Warning>
+You cannot provide a configuration when the type has its own config (e.g., `BaseModel`, `TypedDict`, or `dataclass`).
+</Warning>
+</ParamField>
+
+<ParamField path="_parent_depth" type="int" default="2">
+Depth at which to search for the parent frame for resolving forward annotations.
+</ParamField>
+
+<ParamField path="module" type="str | None">
+The module that passes to plugin if provided.
+</ParamField>
+
+<ResponseField name="raises" type="PydanticUserError">
+If `config` is provided when the type has its own config.
+</ResponseField>
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(list[int])
+result = ta.validate_python(['1', '2', '3'])
+print(result)
+#> [1, 2, 3]
+```
+
+## Attributes
+
+<ResponseField name="core_schema" type="CoreSchema">
+The core schema for the type.
+</ResponseField>
+
+<ResponseField name="validator" type="SchemaValidator | PluggableSchemaValidator">
+The schema validator for the type.
+</ResponseField>
+
+<ResponseField name="serializer" type="SchemaSerializer">
+The schema serializer for the type.
+</ResponseField>
+
+<ResponseField name="pydantic_complete" type="bool">
+Whether the core schema for the type is successfully built.
+</ResponseField>
+
+## Validation Methods
+
+### `validate_python`
+
+```python
+def validate_python(
+    self,
+    object: Any,
+    /,
+    *,
+    strict: bool | None = None,
+    extra: ExtraValues | None = None,
+    from_attributes: bool | None = None,
+    context: Any | None = None,
+    experimental_allow_partial: bool | Literal['off', 'on', 'trailing-strings'] = False,
+    by_alias: bool | None = None,
+    by_name: bool | None = None,
+) -> T
+```
+
+Validate a Python object against the model.
+
+<ParamField path="object" type="Any">
+The Python object to validate against the model.
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+Whether to strictly check types.
+</ParamField>
+
+<ParamField path="extra" type="ExtraValues | None">
+Whether to ignore, allow, or forbid extra data during model validation.
+</ParamField>
+
+<ParamField path="from_attributes" type="bool | None">
+Whether to extract data from object attributes.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the validator.
+</ParamField>
+
+<ParamField path="experimental_allow_partial" type="bool | Literal['off', 'on', 'trailing-strings']" default="False">
+Whether to enable partial validation for processing streams.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias when validating.
+</ParamField>
+
+<ParamField path="by_name" type="bool | None">
+Whether to use the field's name when validating.
+</ParamField>
+
+<ResponseField name="return" type="T">
+The validated object.
+</ResponseField>
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(dict[str, int])
+result = ta.validate_python({'a': '1', 'b': '2'})
+print(result)
+#> {'a': 1, 'b': 2}
+```
+
+### `validate_json`
+
+```python
+def validate_json(
+    self,
+    data: str | bytes | bytearray,
+    /,
+    *,
+    strict: bool | None = None,
+    extra: ExtraValues | None = None,
+    context: Any | None = None,
+    experimental_allow_partial: bool | Literal['off', 'on', 'trailing-strings'] = False,
+    by_alias: bool | None = None,
+    by_name: bool | None = None,
+) -> T
+```
+
+Validate a JSON string or bytes against the model.
+
+<ParamField path="data" type="str | bytes | bytearray">
+The JSON data to validate against the model.
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+Whether to strictly check types.
+</ParamField>
+
+<ParamField path="extra" type="ExtraValues | None">
+Whether to ignore, allow, or forbid extra data.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to use during validation.
+</ParamField>
+
+<ParamField path="experimental_allow_partial" type="bool | Literal['off', 'on', 'trailing-strings']" default="False">
+Whether to enable partial validation.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias when validating.
+</ParamField>
+
+<ParamField path="by_name" type="bool | None">
+Whether to use the field's name when validating.
+</ParamField>
+
+<ResponseField name="return" type="T">
+The validated object.
+</ResponseField>
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(list[int])
+result = ta.validate_json('[1, 2, 3]')
+print(result)
+#> [1, 2, 3]
+```
+
+### `validate_strings`
+
+```python
+def validate_strings(
+    self,
+    obj: Any,
+    /,
+    *,
+    strict: bool | None = None,
+    extra: ExtraValues | None = None,
+    context: Any | None = None,
+    experimental_allow_partial: bool | Literal['off', 'on', 'trailing-strings'] = False,
+    by_alias: bool | None = None,
+    by_name: bool | None = None,
+) -> T
+```
+
+Validate object contains string data against the model.
+
+<ParamField path="obj" type="Any">
+The object contains string data to validate.
+</ParamField>
+
+<ParamField path="strict" type="bool | None">
+Whether to strictly check types.
+</ParamField>
+
+<ParamField path="extra" type="ExtraValues | None">
+Whether to ignore, allow, or forbid extra data.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to use during validation.
+</ParamField>
+
+<ParamField path="experimental_allow_partial" type="bool | Literal['off', 'on', 'trailing-strings']" default="False">
+Whether to enable partial validation.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use the field's alias when validating.
+</ParamField>
+
+<ParamField path="by_name" type="bool | None">
+Whether to use the field's name when validating.
+</ParamField>
+
+<ResponseField name="return" type="T">
+The validated object.
+</ResponseField>
+
+### `get_default_value`
+
+```python
+def get_default_value(
+    self,
+    *,
+    strict: bool | None = None,
+    context: Any | None = None
+) -> Some[T] | None
+```
+
+Get the default value for the wrapped type.
+
+<ParamField path="strict" type="bool | None">
+Whether to strictly check types.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the validator.
+</ParamField>
+
+<ResponseField name="return" type="Some[T] | None">
+The default value wrapped in a `Some` if there is one or None if not.
+</ResponseField>
+
+## Serialization Methods
+
+### `dump_python`
+
+```python
+def dump_python(
+    self,
+    instance: T,
+    /,
+    *,
+    mode: Literal['json', 'python'] = 'python',
+    include: IncEx | None = None,
+    exclude: IncEx | None = None,
+    by_alias: bool | None = None,
+    exclude_unset: bool = False,
+    exclude_defaults: bool = False,
+    exclude_none: bool = False,
+    exclude_computed_fields: bool = False,
+    round_trip: bool = False,
+    warnings: bool | Literal['none', 'warn', 'error'] = True,
+    fallback: Callable[[Any], Any] | None = None,
+    serialize_as_any: bool = False,
+    polymorphic_serialization: bool | None = None,
+    context: Any | None = None,
+) -> Any
+```
+
+Dump an instance of the adapted type to a Python object.
+
+<ParamField path="instance" type="T">
+The Python object to serialize.
+</ParamField>
+
+<ParamField path="mode" type="Literal['json', 'python']" default="'python'">
+The output format.
+</ParamField>
+
+<ParamField path="include" type="IncEx | None">
+Fields to include in the output.
+</ParamField>
+
+<ParamField path="exclude" type="IncEx | None">
+Fields to exclude from the output.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use alias names for field names.
+</ParamField>
+
+<ParamField path="exclude_unset" type="bool" default="False">
+Whether to exclude unset fields.
+</ParamField>
+
+<ParamField path="exclude_defaults" type="bool" default="False">
+Whether to exclude fields with default values.
+</ParamField>
+
+<ParamField path="exclude_none" type="bool" default="False">
+Whether to exclude fields with None values.
+</ParamField>
+
+<ParamField path="exclude_computed_fields" type="bool" default="False">
+Whether to exclude computed fields.
+</ParamField>
+
+<ParamField path="round_trip" type="bool" default="False">
+Whether to output serialized data compatible with deserialization.
+</ParamField>
+
+<ParamField path="warnings" type="bool | Literal['none', 'warn', 'error']" default="True">
+How to handle serialization errors.
+</ParamField>
+
+<ParamField path="fallback" type="Callable[[Any], Any] | None">
+A function to call when an unknown value is encountered.
+</ParamField>
+
+<ParamField path="serialize_as_any" type="bool" default="False">
+Whether to serialize fields with duck-typing serialization behavior.
+</ParamField>
+
+<ParamField path="polymorphic_serialization" type="bool | None">
+Whether to use polymorphic serialization.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the serializer.
+</ParamField>
+
+<ResponseField name="return" type="Any">
+The serialized object.
+</ResponseField>
+
+```python
+from pydantic import TypeAdapter
+from datetime import datetime
+
+ta = TypeAdapter(datetime)
+dt = datetime(2024, 1, 15, 10, 30)
+result = ta.dump_python(dt, mode='json')
+print(result)
+#> '2024-01-15T10:30:00'
+```
+
+### `dump_json`
+
+```python
+def dump_json(
+    self,
+    instance: T,
+    /,
+    *,
+    indent: int | None = None,
+    ensure_ascii: bool = False,
+    include: IncEx | None = None,
+    exclude: IncEx | None = None,
+    by_alias: bool | None = None,
+    exclude_unset: bool = False,
+    exclude_defaults: bool = False,
+    exclude_none: bool = False,
+    exclude_computed_fields: bool = False,
+    round_trip: bool = False,
+    warnings: bool | Literal['none', 'warn', 'error'] = True,
+    fallback: Callable[[Any], Any] | None = None,
+    serialize_as_any: bool = False,
+    polymorphic_serialization: bool | None = None,
+    context: Any | None = None,
+) -> bytes
+```
+
+Serialize an instance of the adapted type to JSON.
+
+<ParamField path="instance" type="T">
+The instance to be serialized.
+</ParamField>
+
+<ParamField path="indent" type="int | None">
+Number of spaces for JSON indentation.
+</ParamField>
+
+<ParamField path="ensure_ascii" type="bool" default="False">
+If True, all non-ASCII characters will be escaped.
+</ParamField>
+
+<ParamField path="include" type="IncEx | None">
+Fields to include.
+</ParamField>
+
+<ParamField path="exclude" type="IncEx | None">
+Fields to exclude.
+</ParamField>
+
+<ParamField path="by_alias" type="bool | None">
+Whether to use alias names for field names.
+</ParamField>
+
+<ParamField path="exclude_unset" type="bool" default="False">
+Whether to exclude unset fields.
+</ParamField>
+
+<ParamField path="exclude_defaults" type="bool" default="False">
+Whether to exclude fields with default values.
+</ParamField>
+
+<ParamField path="exclude_none" type="bool" default="False">
+Whether to exclude fields with a value of None.
+</ParamField>
+
+<ParamField path="exclude_computed_fields" type="bool" default="False">
+Whether to exclude computed fields.
+</ParamField>
+
+<ParamField path="round_trip" type="bool" default="False">
+Whether to serialize and deserialize for round-tripping.
+</ParamField>
+
+<ParamField path="warnings" type="bool | Literal['none', 'warn', 'error']" default="True">
+How to handle serialization errors.
+</ParamField>
+
+<ParamField path="fallback" type="Callable[[Any], Any] | None">
+A function to call when an unknown value is encountered.
+</ParamField>
+
+<ParamField path="serialize_as_any" type="bool" default="False">
+Whether to serialize fields with duck-typing serialization behavior.
+</ParamField>
+
+<ParamField path="polymorphic_serialization" type="bool | None">
+Whether to use polymorphic serialization.
+</ParamField>
+
+<ParamField path="context" type="Any | None">
+Additional context to pass to the serializer.
+</ParamField>
+
+<ResponseField name="return" type="bytes">
+The JSON representation as bytes.
+</ResponseField>
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(dict[str, int])
+result = ta.dump_json({'a': 1, 'b': 2})
+print(result)
+#> b'{"a":1,"b":2}'
+```
+
+## Schema Methods
+
+### `json_schema`
+
+```python
+def json_schema(
+    self,
+    *,
+    by_alias: bool = True,
+    ref_template: str = DEFAULT_REF_TEMPLATE,
+    union_format: Literal['any_of', 'primitive_type_array'] = 'any_of',
+    schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+    mode: JsonSchemaMode = 'validation',
+) -> dict[str, Any]
+```
+
+Generate a JSON schema for the adapted type.
+
+<ParamField path="by_alias" type="bool" default="True">
+Whether to use alias names for field names.
+</ParamField>
+
+<ParamField path="ref_template" type="str">
+The format string used for generating $ref strings.
+</ParamField>
+
+<ParamField path="union_format" type="Literal['any_of', 'primitive_type_array']" default="'any_of'">
+The format to use when combining schemas from unions.
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateJsonSchema]">
+To override the logic used to generate the JSON schema.
+</ParamField>
+
+<ParamField path="mode" type="JsonSchemaMode" default="'validation'">
+The mode in which to generate the schema.
+</ParamField>
+
+<ResponseField name="return" type="dict[str, Any]">
+The JSON schema for the model as a dictionary.
+</ResponseField>
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(list[int])
+schema = ta.json_schema()
+print(schema)
+#> {'items': {'type': 'integer'}, 'type': 'array'}
+```
+
+### `json_schemas`
+
+```python
+@staticmethod
+def json_schemas(
+    inputs: Iterable[tuple[JsonSchemaKeyT, JsonSchemaMode, TypeAdapter[Any]]],
+    /,
+    *,
+    by_alias: bool = True,
+    title: str | None = None,
+    description: str | None = None,
+    ref_template: str = DEFAULT_REF_TEMPLATE,
+    union_format: Literal['any_of', 'primitive_type_array'] = 'any_of',
+    schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+) -> tuple[dict[tuple[JsonSchemaKeyT, JsonSchemaMode], JsonSchemaValue], JsonSchemaValue]
+```
+
+Generate a JSON schema including definitions from multiple type adapters.
+
+<ParamField path="inputs" type="Iterable[tuple[JsonSchemaKeyT, JsonSchemaMode, TypeAdapter[Any]]]">
+Inputs to schema generation. The first two items form the keys of the output mapping.
+</ParamField>
+
+<ParamField path="by_alias" type="bool" default="True">
+Whether to use alias names.
+</ParamField>
+
+<ParamField path="title" type="str | None">
+The title for the schema.
+</ParamField>
+
+<ParamField path="description" type="str | None">
+The description for the schema.
+</ParamField>
+
+<ParamField path="ref_template" type="str">
+The format string used for generating $ref strings.
+</ParamField>
+
+<ParamField path="union_format" type="Literal['any_of', 'primitive_type_array']" default="'any_of'">
+The format to use when combining schemas from unions.
+</ParamField>
+
+<ParamField path="schema_generator" type="type[GenerateJsonSchema]">
+The generator class used for creating the schema.
+</ParamField>
+
+<ResponseField name="return" type="tuple[dict, dict]">
+A tuple of (schemas_map, definitions_schema).
+</ResponseField>
+
+### `rebuild`
+
+```python
+def rebuild(
+    self,
+    *,
+    force: bool = False,
+    raise_errors: bool = True,
+    _parent_namespace_depth: int = 2,
+    _types_namespace: MappingNamespace | None = None,
+) -> bool | None
+```
+
+Try to rebuild the pydantic-core schema for the adapter's type.
+
+<ParamField path="force" type="bool" default="False">
+Whether to force the rebuilding of the type adapter's schema.
+</ParamField>
+
+<ParamField path="raise_errors" type="bool" default="True">
+Whether to raise errors.
+</ParamField>
+
+<ParamField path="_parent_namespace_depth" type="int" default="2">
+Depth at which to search for the parent frame.
+</ParamField>
+
+<ParamField path="_types_namespace" type="MappingNamespace | None">
+An explicit types namespace to use.
+</ParamField>
+
+<ResponseField name="return" type="bool | None">
+Returns `None` if the schema is already complete. If rebuilding was required, returns `True` if successful, otherwise `False`.
+</ResponseField>
+
+## Usage Examples
+
+### Basic Type Validation
+
+```python
+from pydantic import TypeAdapter
+
+# Validate a list of integers
+ta_list = TypeAdapter(list[int])
+result = ta_list.validate_python(['1', '2', '3'])
+print(result)
+#> [1, 2, 3]
+
+# Validate a dictionary
+ta_dict = TypeAdapter(dict[str, int])
+result = ta_dict.validate_python({'a': '1', 'b': '2'})
+print(result)
+#> {'a': 1, 'b': 2}
+```
+
+### JSON Validation
+
+```python
+from pydantic import TypeAdapter
+
+ta = TypeAdapter(list[dict[str, int]])
+json_data = '[{"a": 1}, {"b": 2}]'
+result = ta.validate_json(json_data)
+print(result)
+#> [{'a': 1}, {'b': 2}]
+```
+
+### Custom Configuration
+
+```python
+from pydantic import TypeAdapter, ConfigDict
+
+ta = TypeAdapter(
+    list[str],
+    config=ConfigDict(str_to_lower=True, str_strip_whitespace=True)
+)
+
+result = ta.validate_python(['  HELLO  ', '  WORLD  '])
+print(result)
+#> ['hello', 'world']
+```
+
+### Serialization
+
+```python
+from pydantic import TypeAdapter
+from datetime import datetime
+
+ta = TypeAdapter(list[datetime])
+dates = [datetime(2024, 1, 1), datetime(2024, 1, 2)]
+
+json_bytes = ta.dump_json(dates)
+print(json_bytes)
+#> b'["2024-01-01T00:00:00","2024-01-02T00:00:00"]'
+
+python_obj = ta.dump_python(dates, mode='json')
+print(python_obj)
+#> ['2024-01-01T00:00:00', '2024-01-02T00:00:00']
+```

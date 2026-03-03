@@ -1,0 +1,416 @@
+---
+title: Types
+description: Built-in types, type annotations, and custom types in Pydantic
+---
+
+Pydantic provides extensive support for Python type annotations, including built-in types, custom types, and specialized validation types.
+
+## Built-in Types
+
+Pydantic supports all standard Python types:
+
+### Primitive Types
+
+```python
+from pydantic import BaseModel
+
+class Example(BaseModel):
+    integer: int
+    floating: float
+    text: str
+    flag: bool
+    none_value: None
+
+example = Example(
+    integer=42,
+    floating=3.14,
+    text='hello',
+    flag=True,
+    none_value=None
+)
+```
+
+### Collection Types
+
+```python
+from typing import List, Dict, Set, Tuple, FrozenSet
+from pydantic import BaseModel
+
+class Collections(BaseModel):
+    items: List[int]
+    mapping: Dict[str, int]
+    unique: Set[str]
+    pair: Tuple[int, str]
+    immutable_set: FrozenSet[int]
+
+collections = Collections(
+    items=[1, 2, 3],
+    mapping={'a': 1, 'b': 2},
+    unique={'x', 'y', 'z'},
+    pair=(1, 'one'),
+    immutable_set=frozenset([1, 2, 3])
+)
+```
+
+## Strict Types
+
+Strict types enforce exact type matching without coercion:
+
+```python
+from pydantic import BaseModel, StrictInt, StrictStr, StrictBool, ValidationError
+
+class StrictModel(BaseModel):
+    strict_int: StrictInt
+    strict_str: StrictStr
+    strict_bool: StrictBool
+
+# This works
+model = StrictModel(strict_int=42, strict_str='hello', strict_bool=True)
+
+# This fails - no coercion
+try:
+    StrictModel(strict_int='42', strict_str=123, strict_bool=1)
+except ValidationError as e:
+    print(e)
+```
+
+## Constrained Types
+
+### Constrained Integers
+
+```python
+from pydantic import BaseModel, PositiveInt, NegativeInt, NonNegativeInt, NonPositiveInt, Field
+
+class Numbers(BaseModel):
+    positive: PositiveInt  # > 0
+    negative: NegativeInt  # < 0
+    non_negative: NonNegativeInt  # >= 0
+    non_positive: NonPositiveInt  # <= 0
+    custom_range: int = Field(ge=1, le=100)
+
+numbers = Numbers(
+    positive=10,
+    negative=-5,
+    non_negative=0,
+    non_positive=0,
+    custom_range=50
+)
+```
+
+### Constrained Floats
+
+```python
+from pydantic import BaseModel, PositiveFloat, NegativeFloat, FiniteFloat, Field
+
+class Measurements(BaseModel):
+    positive: PositiveFloat
+    negative: NegativeFloat
+    finite: FiniteFloat  # No infinity or NaN
+    percentage: float = Field(ge=0.0, le=100.0)
+
+measurements = Measurements(
+    positive=3.14,
+    negative=-2.71,
+    finite=1.618,
+    percentage=75.5
+)
+```
+
+### Constrained Strings
+
+```python
+from pydantic import BaseModel, Field, StringConstraints
+from typing import Annotated
+
+class User(BaseModel):
+    username: str = Field(min_length=3, max_length=20, pattern=r'^[a-zA-Z0-9_]+$')
+    email: str = Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    uppercase_code: Annotated[str, StringConstraints(to_upper=True, min_length=2, max_length=5)]
+
+user = User(
+    username='john_doe',
+    email='john@example.com',
+    uppercase_code='abc'
+)
+print(user.uppercase_code)
+#> ABC
+```
+
+## UUID Types
+
+```python
+from pydantic import BaseModel, UUID1, UUID3, UUID4, UUID5
+from uuid import UUID, uuid4
+
+class UUIDModel(BaseModel):
+    any_uuid: UUID
+    uuid4_only: UUID4
+
+model = UUIDModel(
+    any_uuid=uuid4(),
+    uuid4_only='12345678-1234-4123-8123-123456789012'
+)
+```
+
+## Path Types
+
+```python
+from pydantic import BaseModel, FilePath, DirectoryPath, NewPath
+from pathlib import Path
+
+class Paths(BaseModel):
+    config_file: FilePath  # Must be existing file
+    data_dir: DirectoryPath  # Must be existing directory
+    output_file: NewPath  # Must not exist, parent must exist
+
+# Example (paths must exist on filesystem)
+# paths = Paths(
+#     config_file='/etc/config.json',
+#     data_dir='/var/data',
+#     output_file='/tmp/output.txt'
+# )
+```
+
+## Secret Types
+
+```python
+from pydantic import BaseModel, SecretStr, SecretBytes
+
+class Credentials(BaseModel):
+    username: str
+    password: SecretStr
+    api_key: SecretBytes
+
+creds = Credentials(
+    username='admin',
+    password='super_secret',
+    api_key=b'secret_key'
+)
+
+print(creds.username)
+#> admin
+
+print(creds.password)
+#> **********
+
+print(creds.password.get_secret_value())
+#> super_secret
+
+print(creds.model_dump())
+#> {'username': 'admin', 'password': SecretStr('**********'), 'api_key': SecretBytes(b'**********')}
+```
+
+## Date and Time Types
+
+```python
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, AwareDatetime, NaiveDatetime, PastDate, FutureDate
+
+class Schedule(BaseModel):
+    created: datetime
+    event_date: date
+    start_time: time
+    duration: timedelta
+    
+    # Specialized date/datetime types
+    aware_dt: AwareDatetime  # Must have timezone
+    naive_dt: NaiveDatetime  # Must not have timezone
+    birth_date: PastDate  # Must be in the past
+    deadline: FutureDate  # Must be in the future
+
+schedule = Schedule(
+    created='2024-01-15T10:30:00Z',
+    event_date='2024-12-25',
+    start_time='14:30:00',
+    duration='PT2H30M',
+    aware_dt='2024-01-15T10:30:00+00:00',
+    naive_dt='2024-01-15T10:30:00',
+    birth_date='1990-01-01',
+    deadline='2025-12-31'
+)
+```
+
+## JSON Type
+
+```python
+from pydantic import BaseModel, Json
+from typing import List
+
+class Response(BaseModel):
+    data: Json[List[int]]
+
+# Validates JSON string and parses it
+response = Response(data='[1, 2, 3, 4, 5]')
+print(response.data)
+#> [1, 2, 3, 4, 5]
+print(type(response.data))
+#> <class 'list'>
+```
+
+## Decimal Type
+
+```python
+from decimal import Decimal
+from pydantic import BaseModel, Field
+
+class Price(BaseModel):
+    amount: Decimal = Field(max_digits=10, decimal_places=2)
+    tax: Decimal = Field(ge=0, le=1)
+
+price = Price(amount='99.99', tax='0.08')
+print(price.amount * (1 + price.tax))
+#> 107.9892
+```
+
+## Literal Types
+
+```python
+from typing import Literal
+from pydantic import BaseModel
+
+class Config(BaseModel):
+    environment: Literal['dev', 'staging', 'prod']
+    log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR']
+
+config = Config(environment='prod', log_level='INFO')
+```
+
+## Union Types
+
+```python
+from typing import Union
+from pydantic import BaseModel
+
+class FlexibleModel(BaseModel):
+    value: Union[int, str, float]
+    id: int | str  # Python 3.10+ syntax
+
+model1 = FlexibleModel(value=42, id=123)
+model2 = FlexibleModel(value='hello', id='abc')
+model3 = FlexibleModel(value=3.14, id=456)
+```
+
+## Custom Types with Annotated
+
+```python
+from typing import Annotated
+from pydantic import BaseModel, Field, BeforeValidator
+
+def validate_username(v: str) -> str:
+    if not v.isalnum():
+        raise ValueError('must be alphanumeric')
+    return v.lower()
+
+Username = Annotated[str, BeforeValidator(validate_username), Field(min_length=3, max_length=20)]
+
+class User(BaseModel):
+    username: Username
+
+user = User(username='JohnDoe123')
+print(user.username)
+#> johndoe123
+```
+
+## ImportString Type
+
+```python
+import math
+from pydantic import BaseModel, ImportString
+
+class FunctionConfig(BaseModel):
+    function: ImportString
+
+config = FunctionConfig(function='math.cos')
+print(config.function)
+#> <built-in function cos>
+print(config.function(0))
+#> 1.0
+```
+
+## ByteSize Type
+
+```python
+from pydantic import BaseModel, ByteSize
+
+class FileConfig(BaseModel):
+    max_size: ByteSize
+
+config = FileConfig(max_size='1MB')
+print(config.max_size)
+#> 1000000
+
+config2 = FileConfig(max_size='1.5 GB')
+print(config2.max_size)
+#> 1500000000
+```
+
+## Discriminated Unions
+
+```python
+from typing import Literal, Union
+from pydantic import BaseModel, Field
+
+class Cat(BaseModel):
+    pet_type: Literal['cat']
+    meows: int
+
+class Dog(BaseModel):
+    pet_type: Literal['dog']
+    barks: int
+
+class Pet(BaseModel):
+    animal: Union[Cat, Dog] = Field(discriminator='pet_type')
+
+pet1 = Pet(animal={'pet_type': 'cat', 'meows': 5})
+pet2 = Pet(animal={'pet_type': 'dog', 'barks': 10})
+
+print(type(pet1.animal))
+#> <class '__main__.Cat'>
+print(type(pet2.animal))
+#> <class '__main__.Dog'>
+```
+
+## Type Aliases
+
+```python
+from typing import Annotated, List
+from pydantic import BaseModel, Field
+
+# Create reusable type aliases
+PositiveInt = Annotated[int, Field(gt=0)]
+Username = Annotated[str, Field(min_length=3, max_length=20, pattern=r'^[a-zA-Z0-9_]+$')]
+EmailList = List[Annotated[str, Field(pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')]]
+
+class User(BaseModel):
+    id: PositiveInt
+    username: Username
+    emails: EmailList
+
+user = User(
+    id=123,
+    username='john_doe',
+    emails=['john@example.com', 'doe@example.com']
+)
+```
+
+## Best Practices
+
+<Note>
+  - Use strict types when you need exact type matching
+  - Leverage constrained types to add validation logic
+  - Use `SecretStr` and `SecretBytes` for sensitive data
+  - Create type aliases for commonly used constrained types
+  - Use discriminated unions for efficient polymorphic validation
+  - Prefer `Decimal` over `float` for financial calculations
+</Note>
+
+<Warning>
+  Avoid using `Any` type as it bypasses validation:
+  ```python
+  # Bad - no validation
+  data: Any
+  
+  # Better - use Union or specific types
+  data: Union[int, str, dict]
+  ```
+</Warning>

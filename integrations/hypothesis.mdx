@@ -1,0 +1,332 @@
+---
+title: Hypothesis Integration
+description: Property-based testing with Hypothesis and Pydantic
+---
+
+[Hypothesis](https://hypothesis.readthedocs.io/) is the Python library for [property-based testing](https://increment.com/testing/in-praise-of-property-based-testing/). It can automatically generate test data based on type annotations.
+
+<Warning>
+Pydantic v2 has **temporarily removed** the built-in Hypothesis plugin. We are studying alternative mechanisms for integration.
+
+For updates, see:
+- [annotated-types/annotated-types#37](https://github.com/annotated-types/annotated-types/issues/37)
+- [pydantic/pydantic#4682](https://github.com/pydantic/pydantic/issues/4682)
+</Warning>
+
+## Current Status
+
+While Pydantic v2 doesn't ship with an integrated Hypothesis plugin, you can still:
+
+1. Use Hypothesis with basic Pydantic models
+2. Manually define strategies for complex types
+3. Use the v1 plugin as a reference (see below)
+
+## Basic Usage with Hypothesis
+
+Hypothesis can infer strategies for simple Pydantic models:
+
+```python
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    username: str
+    is_active: bool
+
+# Hypothesis can build instances of User automatically
+@given(st.builds(User))
+def test_user_model(user: User):
+    # Test that any generated user is valid
+    assert isinstance(user, User)
+    assert isinstance(user.id, int)
+    assert isinstance(user.username, str)
+    assert isinstance(user.is_active, bool)
+```
+
+## Manual Strategy Definition
+
+For models with constraints, define custom strategies:
+
+```python
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import BaseModel, Field, EmailStr
+
+class RegisterUser(BaseModel):
+    username: str = Field(min_length=3, max_length=20)
+    email: EmailStr
+    age: int = Field(ge=13, le=120)
+
+# Define a strategy that respects field constraints
+user_strategy = st.builds(
+    RegisterUser,
+    username=st.text(min_size=3, max_size=20, alphabet=st.characters(blacklist_categories=['Cs'])),
+    email=st.emails(),
+    age=st.integers(min_value=13, max_value=120)
+)
+
+@given(user_strategy)
+def test_register_user(user: RegisterUser):
+    # All generated users will satisfy the field constraints
+    assert 3 <= len(user.username) <= 20
+    assert 13 <= user.age <= 120
+    assert '@' in user.email
+```
+
+## Handling Pydantic Validation
+
+Test that your validators work correctly:
+
+```python
+from hypothesis import assume, given
+from hypothesis import strategies as st
+from pydantic import BaseModel, field_validator, ValidationError
+
+class Product(BaseModel):
+    name: str
+    price: float
+    
+    @field_validator('price')
+    @classmethod
+    def price_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Price must be positive')
+        return v
+
+@given(
+    name=st.text(min_size=1),
+    price=st.floats(allow_nan=False, allow_infinity=False)
+)
+def test_product_validation(name: str, price: float):
+    if price <= 0:
+        # Expect validation to fail for non-positive prices
+        try:
+            Product(name=name, price=price)
+            assert False, "Should have raised ValidationError"
+        except ValidationError:
+            pass  # Expected
+    else:
+        # Should succeed for positive prices
+        product = Product(name=name, price=price)
+        assert product.price > 0
+```
+
+## Testing Serialization
+
+Verify that models can serialize and deserialize correctly:
+
+```python
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import BaseModel
+import json
+
+class Article(BaseModel):
+    title: str
+    views: int
+    published: bool
+
+@given(st.builds(Article))
+def test_article_json_roundtrip(article: Article):
+    # Serialize to JSON
+    json_str = article.model_dump_json()
+    
+    # Deserialize back
+    article_copy = Article.model_validate_json(json_str)
+    
+    # Should be equal
+    assert article == article_copy
+    assert article.model_dump() == article_copy.model_dump()
+```
+
+## Advanced Strategies
+
+### Nested Models
+
+Build strategies for nested models:
+
+```python
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import BaseModel
+
+class Address(BaseModel):
+    street: str
+    city: str
+    postal_code: str
+
+class Person(BaseModel):
+    name: str
+    address: Address
+
+# Strategy for Address
+address_strategy = st.builds(
+    Address,
+    street=st.text(min_size=1),
+    city=st.text(min_size=1),
+    postal_code=st.text(min_size=5, max_size=10)
+)
+
+# Strategy for Person using address_strategy
+person_strategy = st.builds(
+    Person,
+    name=st.text(min_size=1),
+    address=address_strategy
+)
+
+@given(person_strategy)
+def test_person_with_address(person: Person):
+    assert isinstance(person.address, Address)
+    assert len(person.address.postal_code) >= 5
+```
+
+### Lists and Optional Fields
+
+```python
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import BaseModel
+
+class Team(BaseModel):
+    name: str
+    members: list[str]
+    description: str | None = None
+
+team_strategy = st.builds(
+    Team,
+    name=st.text(min_size=1),
+    members=st.lists(st.text(min_size=1), min_size=1, max_size=10),
+    description=st.one_of(st.none(), st.text())
+)
+
+@given(team_strategy)
+def test_team_has_members(team: Team):
+    assert len(team.members) >= 1
+    assert all(isinstance(m, str) for m in team.members)
+```
+
+## Pydantic v1 Plugin Reference
+
+For reference, Pydantic v1 included a Hypothesis plugin. You can view the implementation in [`pydantic/v1/_hypothesis_plugin.py`](~/workspace/source/pydantic/v1/_hypothesis_plugin.py:1).
+
+The v1 plugin provided automatic strategy registration for Pydantic types:
+
+```python
+# From pydantic v1 (for reference only)
+import hypothesis.strategies as st
+from pydantic import EmailStr, PyObject
+
+# Plugin registered strategies like:
+st.register_type_strategy(EmailStr, st.emails().filter(is_valid_email))
+st.register_type_strategy(PyObject, st.sampled_from([...]))
+```
+
+Key patterns from the v1 plugin:
+
+- **Email validation** - Filtered Hypothesis emails to match `email-validator` rules
+- **Constrained types** - Generated values within min/max bounds
+- **Custom types** - Registered strategies for Pydantic-specific types
+
+## Best Practices
+
+<Steps>
+
+### Define Realistic Strategies
+
+Match your strategies to real-world constraints:
+
+```python
+# Good: Realistic email strategy
+email_strategy = st.emails()
+
+# Better: Constrained to your domain
+internal_email_strategy = st.builds(
+    lambda user: f"{user}@company.com",
+    user=st.text(min_size=3, max_size=20, alphabet=st.characters(whitelist_categories=['L', 'N']))
+)
+```
+
+### Use assume() for Complex Constraints
+
+When validation is complex, use `assume()` to filter examples:
+
+```python
+from hypothesis import assume, given
+from hypothesis import strategies as st
+
+@given(st.integers(), st.integers())
+def test_division(a: int, b: int):
+    assume(b != 0)  # Skip cases where b is zero
+    result = a / b
+    assert isinstance(result, float)
+```
+
+### Test Invariants
+
+Use property-based testing to verify model invariants:
+
+```python
+from hypothesis import given
+from hypothesis import strategies as st
+from pydantic import BaseModel, Field
+
+class Rectangle(BaseModel):
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    
+    @property
+    def area(self) -> float:
+        return self.width * self.height
+
+@given(
+    width=st.floats(min_value=0.1, max_value=1000),
+    height=st.floats(min_value=0.1, max_value=1000)
+)
+def test_rectangle_area_positive(width: float, height: float):
+    rect = Rectangle(width=width, height=height)
+    assert rect.area > 0
+    assert rect.area == width * height
+```
+
+### Combine with Pytest
+
+Integrate with pytest for better test organization:
+
+```python
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+class TestUserModel:
+    @given(st.builds(User))
+    @settings(max_examples=100)  # Run 100 test cases
+    def test_user_creation(self, user: User):
+        assert user.model_validate(user.model_dump()) == user
+    
+    @given(st.builds(User))
+    def test_user_json_schema(self, user: User):
+        # Verify the instance matches the schema
+        schema = User.model_json_schema()
+        assert 'properties' in schema
+```
+
+</Steps>
+
+## Future Integration
+
+The Pydantic team is exploring new mechanisms for Hypothesis integration that work better with:
+
+- **Annotated types** - The `annotated-types` library used by Pydantic v2
+- **Field constraints** - Automatic strategy generation from Field() constraints  
+- **Custom validators** - Strategies that respect field_validator logic
+
+Follow [pydantic/pydantic#4682](https://github.com/pydantic/pydantic/issues/4682) for updates on when the Hypothesis plugin will return.
+
+## Related Resources
+
+- [Hypothesis Documentation](https://hypothesis.readthedocs.io/)
+- [Property-Based Testing Guide](https://increment.com/testing/in-praise-of-property-based-testing/)
+- [Pydantic Validators](../concepts/validators.md)
+- [Pydantic Testing Guide](../concepts/models.md)

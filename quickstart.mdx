@@ -1,80 +1,462 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Build your first Pydantic model and learn the basics of data validation
 ---
 
-## Get started in three steps
+# Quick Start
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating your first Pydantic model and demonstrate the core features of the library.
 
-### Step 1: Set up your local environment
+## Your First Model
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Let's create a simple `User` model:
 
-### Step 2: Deploy your changes
+```python
+from pydantic import BaseModel
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+# Create a user instance
+user = User(id=123, name='John Doe', email='john@example.com')
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+print(user)
+#> User id=123 name='John Doe' email='john@example.com'
 
-### Step 3: Go live
+print(user.id)
+#> 123
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+print(user.model_dump())
+#> {'id': 123, 'name': 'John Doe', 'email': 'john@example.com'}
+```
 
-## Next steps
+<Tip>
+All Pydantic models inherit from `BaseModel`. Fields are defined using Python type annotations.
+</Tip>
 
-Now that you have your docs running, explore these key features:
+## Automatic Type Validation
 
-<CardGroup cols={2}>
+Pydantic automatically validates data types:
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+```python
+from pydantic import BaseModel
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+class Product(BaseModel):
+    product_id: int
+    name: str
+    price: float
+    in_stock: bool
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+# Pydantic converts compatible types automatically
+product = Product(
+    product_id='42',      # string → int
+    name='Widget',
+    price='19.99',        # string → float
+    in_stock='yes'        # string → bool
+)
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+print(product.product_id)  #> 42
+print(type(product.product_id))  #> <class 'int'>
 
-</CardGroup>
+print(product.price)  #> 19.99
+print(type(product.price))  #> <class 'float'>
+```
+
+## Default Values
+
+Fields can have default values:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str = 'John Doe'  # Default value
+    is_active: bool = True   # Default value
+
+user1 = User(id=1)
+print(user1)
+#> User id=1 name='John Doe' is_active=True
+
+user2 = User(id=2, name='Jane Smith', is_active=False)
+print(user2)
+#> User id=2 name='Jane Smith' is_active=False
+```
+
+## Optional Fields
+
+Use `Optional` or `None` default for optional fields:
+
+```python
+from typing import Optional
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: Optional[str] = None
+    phone: str | None = None  # Python 3.10+ syntax
+
+user = User(id=1, name='John')
+print(user)
+#> User id=1 name='John' email=None phone=None
+
+user_with_email = User(id=2, name='Jane', email='jane@example.com')
+print(user_with_email.email)
+#> jane@example.com
+```
+
+## Validation Errors
+
+When validation fails, Pydantic raises a `ValidationError` with detailed information:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class User(BaseModel):
+    id: int
+    name: str
+    age: int
+
+try:
+    user = User(id='not-a-number', name='John', age='25')
+except ValidationError as e:
+    print(e)
+    '''
+    1 validation error for User
+    id
+      Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='not-a-number', input_type=str]
+    '''
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The error message tells you exactly which field failed (`id`), why it failed (unable to parse string as integer), and what the input was (`'not-a-number'`).
 </Note>
+
+## Working with Complex Types
+
+Pydantic handles complex nested types:
+
+```python
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str = 'John Doe'
+    signup_ts: Optional[datetime] = None
+    friends: list[int] = []
+    tags: set[str] = set()
+    metadata: dict[str, str] = {}
+
+user_data = {
+    'id': '123',
+    'signup_ts': '2017-06-01 12:22',
+    'friends': [1, '2', b'3'],  # Mixed types!
+    'tags': ['python', 'coding', 'python'],  # Duplicates will be removed
+    'metadata': {'source': 'api', 'version': '2.0'}
+}
+
+user = User(**user_data)
+
+print(user.id)
+#> 123
+
+print(user.signup_ts)
+#> 2017-06-01 12:22:00
+
+print(user.friends)
+#> [1, 2, 3]
+
+print(user.tags)
+#> {'python', 'coding'}
+```
+
+## Field Constraints
+
+Add validation constraints using `Field`:
+
+```python
+from pydantic import BaseModel, Field
+
+class Product(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default='', max_length=500)
+    price: float = Field(gt=0, le=1000000)  # Greater than 0, less than or equal to 1M
+    quantity: int = Field(ge=0)  # Greater than or equal to 0
+
+product = Product(
+    name='Widget',
+    description='A useful widget',
+    price=29.99,
+    quantity=100
+)
+
+try:
+    invalid_product = Product(name='', price=-10, quantity=50)
+except ValidationError as e:
+    print(e)
+    '''
+    2 validation errors for Product
+    name
+      String should have at least 1 character [type=string_too_short, input_value='', input_type=str]
+    price
+      Input should be greater than 0 [type=greater_than, input_value=-10, input_type=int]
+    '''
+```
+
+<CardGroup cols={2}>
+  <Card title="String Constraints" icon="text">
+    `min_length`, `max_length`, `pattern`
+  </Card>
+  
+  <Card title="Numeric Constraints" icon="hashtag">
+    `gt`, `ge`, `lt`, `le`, `multiple_of`
+  </Card>
+  
+  <Card title="Container Constraints" icon="box">
+    `min_length`, `max_length` for lists/sets
+  </Card>
+  
+  <Card title="Custom Constraints" icon="wand-magic-sparkles">
+    Build your own with validators
+  </Card>
+</CardGroup>
+
+## Custom Validators
+
+Add custom validation logic with `field_validator`:
+
+```python
+from pydantic import BaseModel, field_validator
+
+class Product(BaseModel):
+    name: str
+    sku: str
+    
+    @field_validator('name')
+    @classmethod
+    def name_must_contain_space(cls, v: str) -> str:
+        if ' ' not in v:
+            raise ValueError('Product name must contain a space')
+        return v
+    
+    @field_validator('sku')
+    @classmethod
+    def sku_format(cls, v: str) -> str:
+        if not v.startswith('SKU-'):
+            raise ValueError('SKU must start with "SKU-"')
+        return v.upper()
+
+product = Product(name='Super Widget', sku='sku-12345')
+print(product.sku)
+#> SKU-12345
+
+try:
+    invalid = Product(name='Widget', sku='12345')
+except ValidationError as e:
+    print(e)
+    '''
+    2 validation errors for Product
+    name
+      Value error, Product name must contain a space [type=value_error, input_value='Widget', input_type=str]
+    sku
+      Value error, SKU must start with "SKU-" [type=value_error, input_value='12345', input_type=str]
+    '''
+```
+
+<Steps>
+  <Step title="Define the validator">
+    Use the `@field_validator` decorator on a classmethod
+  </Step>
+  
+  <Step title="Receive the value">
+    The validator receives the field value as its first argument
+  </Step>
+  
+  <Step title="Validate and transform">
+    Raise `ValueError` for invalid data, or return the (possibly modified) value
+  </Step>
+</Steps>
+
+## Serialization
+
+Convert models to dictionaries or JSON:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+
+user = User(id=123, name='John Doe', email='john@example.com')
+
+# To dictionary
+user_dict = user.model_dump()
+print(user_dict)
+#> {'id': 123, 'name': 'John Doe', 'email': 'john@example.com'}
+
+# To JSON string
+user_json = user.model_dump_json()
+print(user_json)
+#> {"id":123,"name":"John Doe","email":"john@example.com"}
+
+# Pretty-printed JSON
+user_json_pretty = user.model_dump_json(indent=2)
+print(user_json_pretty)
+'''
+{
+  "id": 123,
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+'''
+```
+
+### Exclude Fields
+
+Exclude specific fields from serialization:
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+    password: str = Field(exclude=True)
+
+user = User(id=1, name='John', email='john@example.com', password='secret123')
+
+# Password is automatically excluded
+print(user.model_dump())
+#> {'id': 1, 'name': 'John', 'email': 'john@example.com'}
+
+# But it's still accessible on the instance
+print(user.password)
+#> secret123
+```
+
+## Parsing JSON
+
+Parse JSON strings directly into models:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: str
+    email: str
+
+json_data = '{"id": 123, "name": "John Doe", "email": "john@example.com"}'
+
+user = User.model_validate_json(json_data)
+print(user)
+#> User id=123 name='John Doe' email='john@example.com'
+```
+
+## Nested Models
+
+Models can contain other models:
+
+```python
+from pydantic import BaseModel
+
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str
+    zip_code: str
+
+class User(BaseModel):
+    id: int
+    name: str
+    address: Address
+
+user_data = {
+    'id': 123,
+    'name': 'John Doe',
+    'address': {
+        'street': '123 Main St',
+        'city': 'Springfield',
+        'country': 'USA',
+        'zip_code': '12345'
+    }
+}
+
+user = User(**user_data)
+print(user.address.city)
+#> Springfield
+
+print(user.model_dump())
+'''
+{
+    'id': 123,
+    'name': 'John Doe',
+    'address': {
+        'street': '123 Main St',
+        'city': 'Springfield',
+        'country': 'USA',
+        'zip_code': '12345'
+    }
+}
+'''
+```
+
+## Handling Errors
+
+Access detailed error information:
+
+```python
+from pydantic import BaseModel, ValidationError
+
+class Model(BaseModel):
+    a: float
+    b: int
+
+try:
+    Model(a='x', b='x')
+except ValidationError as e:
+    # Get errors as list of dicts
+    errors = e.errors()
+    for error in errors:
+        print(f"Field: {error['loc'][0]}")
+        print(f"Error: {error['msg']}")
+        print(f"Input: {error['input']}")
+        print()
+    
+    # Get as JSON
+    print(e.json())
+```
+
+## Next Steps
+
+Now that you understand the basics, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Models" icon="cube" href="/concepts/models">
+    Learn about model configuration, inheritance, and advanced features
+  </Card>
+  
+  <Card title="Fields" icon="input-text" href="/concepts/fields">
+    Deep dive into field types, constraints, and customization
+  </Card>
+  
+  <Card title="Validators" icon="shield-check" href="/concepts/validators">
+    Master custom validation logic and transform data
+  </Card>
+  
+  <Card title="Types" icon="shapes" href="/concepts/types">
+    Explore built-in types for URLs, emails, dates, and more
+  </Card>
+</CardGroup>
+
+<Tip>
+Ready to use Pydantic in a real project? Check out the [Examples](/examples/validation-basics) section for common use cases like API validation, configuration management, and database models.
+</Tip>
