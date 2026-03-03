@@ -1,0 +1,162 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Pydantic",
+  "projectDescription": "Data validation using Python type hints",
+  "theme": "mint",
+  "primaryColor": "#E92063",
+  "lightColor": "#E92063",
+  "darkColor": "#E92063",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "why-pydantic",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/models",
+              "concepts/fields",
+              "concepts/types",
+              "concepts/validators",
+              "concepts/serialization",
+              "concepts/json-schema",
+              "concepts/configuration"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "advanced/type-adapter",
+              "advanced/dataclasses",
+              "advanced/validation-decorator",
+              "advanced/strict-mode",
+              "advanced/unions",
+              "advanced/aliases",
+              "advanced/forward-annotations"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/json",
+              "guides/custom-validators",
+              "guides/error-handling",
+              "guides/performance",
+              "guides/migration-guide"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/validation-basics",
+              "examples/custom-types",
+              "examples/api-models",
+              "examples/database-models",
+              "examples/configuration-management"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/fastapi",
+              "integrations/mypy",
+              "integrations/hypothesis",
+              "integrations/logfire"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/base-model",
+              "api/root-model",
+              "api/fields",
+              "api/config",
+              "api/type-adapter"
+            ]
+          },
+          {
+            "group": "Validators & Serializers",
+            "pages": [
+              "api/functional-validators",
+              "api/functional-serializers",
+              "api/validate-call"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types",
+              "api/standard-library-types",
+              "api/network-types"
+            ]
+          },
+          {
+            "group": "Other",
+            "pages": [
+              "api/dataclasses",
+              "api/json-schema",
+              "api/errors",
+              "api/aliases",
+              "api/version"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Data validation using Python type hints",
+    "Fast validation with Rust-powered core",
+    "Automatic JSON Schema generation",
+    "Custom validators and serializers",
+    "Type coercion and strict mode",
+    "Rich set of built-in types",
+    "Excellent IDE and linter support",
+    "Extensive configuration options"
+  ],
+  "publicApiSurface": [
+    "BaseModel",
+    "RootModel",
+    "Field",
+    "PrivateAttr",
+    "computed_field",
+    "field_validator",
+    "model_validator",
+    "field_serializer",
+    "model_serializer",
+    "TypeAdapter",
+    "ConfigDict",
+    "validate_call",
+    "ValidationError",
+    "dataclasses.dataclass",
+    "AfterValidator",
+    "BeforeValidator",
+    "PlainValidator",
+    "WrapValidator",
+    "StrictStr",
+    "StrictInt",
+    "StrictFloat",
+    "EmailStr",
+    "HttpUrl",
+    "FilePath",
+    "DirectoryPath",
+    "Json",
+    "SecretStr",
+    "AliasChoices",
+    "AliasPath"
+  ]
+}
