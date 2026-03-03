@@ -722,3 +722,89 @@ Memoization dictionary for deepcopy.
 <ResponseField name="return" type="Self">
 A deep copy of the model.
 </ResponseField>
+
+## Related Functions
+
+### `create_model`
+
+```python
+def create_model(
+    model_name: str,
+    *,
+    __config__: ConfigDict | None = None,
+    __doc__: str | None = None,
+    __base__: type[BaseModel] | tuple[type[BaseModel], ...] | None = None,
+    __module__: str | None = None,
+    __validators__: dict[str, Callable[..., Any]] | None = None,
+    __cls_kwargs__: dict[str, Any] | None = None,
+    **field_definitions: Any,
+) -> type[BaseModel]
+```
+
+Dynamically creates a new Pydantic model.
+
+<ParamField path="model_name" type="str" required>
+The name of the newly created model.
+</ParamField>
+
+<ParamField path="__config__" type="ConfigDict | None">
+ConfigDict instance for the new model.
+</ParamField>
+
+<ParamField path="__doc__" type="str | None">
+Docstring for the new model.
+</ParamField>
+
+<ParamField path="__base__" type="type[BaseModel] | tuple[type[BaseModel], ...] | None">
+Base class(es) for the new model.
+</ParamField>
+
+<ParamField path="__module__" type="str | None">
+Module name for the created model.
+</ParamField>
+
+<ParamField path="__validators__" type="dict[str, Callable[..., Any]] | None">
+Dictionary of validator functions.
+</ParamField>
+
+<ParamField path="__cls_kwargs__" type="dict[str, Any] | None">
+Additional keyword arguments for class creation.
+</ParamField>
+
+<ParamField path="field_definitions" type="Any">
+Field definitions as keyword arguments. Each can be a type, a tuple of (type, default), or a FieldInfo instance.
+</ParamField>
+
+<ResponseField name="return" type="type[BaseModel]">
+A new dynamically created model class.
+</ResponseField>
+
+```python
+from pydantic import BaseModel, Field, create_model
+
+# Simple dynamic model
+DynamicUser = create_model(
+    'DynamicUser',
+    name=(str, ...),
+    age=(int, Field(default=0, ge=0))
+)
+
+user = DynamicUser(name='John', age=30)
+print(user)
+#> name='John' age=30
+
+# With base class
+class BaseUser(BaseModel):
+    id: int
+
+DynamicExtendedUser = create_model(
+    'DynamicExtendedUser',
+    __base__=BaseUser,
+    name=(str, ...),
+    email=(str, ...)
+)
+
+extended_user = DynamicExtendedUser(id=1, name='Jane', email='jane@example.com')
+print(extended_user)
+#> id=1 name='Jane' email='jane@example.com'
+```
